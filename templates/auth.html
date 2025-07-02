@@ -127,9 +127,9 @@
                 });
                 const result = await response.json();
                 if (response.ok) {
-                    window.location.href = '/';
+                    window.location.href = result.redirect || '/'; // Sử dụng redirect từ backend
                 } else {
-                    showAlert(result.error);
+                    showAlert(result.error || 'An error occurred');
                 }
             } catch (err) {
                 showAlert('An error occurred. Please try again.');
@@ -154,9 +154,9 @@
                 });
                 const result = await response.json();
                 if (response.ok) {
-                    window.location.href = '/';
+                    window.location.href = result.redirect || '/'; // Sử dụng redirect từ backend
                 } else {
-                    showAlert(result.error);
+                    showAlert(result.error || 'An error occurred');
                 }
             } catch (err) {
                 showAlert('An error occurred. Please try again.');

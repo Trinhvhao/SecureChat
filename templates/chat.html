@@ -4,20 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Chat</title>
-       <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(function() {
-            const userId = {{ user.id }};
-            const contactId = {{ contact.id }};
-            const contactName = "{{ contact.name }}";
+            const userId = {{ user.id if user else 0 }};
+            let contactId = {{ active_contact.id if active_contact else 0 }};
+            let contactName = "{{ active_contact.name | default('') }}";
             let lastMessageId = 0;
+            let isUpdating = false;
+            let messageUpdateInterval;
+            let unreadMessages = {{ unread_counts | tojson | safe }};
+            let isChatActive = false; // Theo dõi trạng thái chat window có đang active không
 
             // Hàm gửi tin nhắn
             function sendMessage() {
-                const message = $('#messageInput').val();
-                if (!message) return;
+                const message = $('#messageInput').val().trim();
+                if (!message || !contactId) return;
+
+                const tempId = 'temp_' + Date.now();
+                const messageHtml = `
+                    <div class="message sent" id="${tempId}" style="animation: fadeIn 0.3s ease;">
+                        <img src="https://i.pravatar.cc/30?img=1" alt="Bạn">
+                        <div class="message-content">
+                            <p>${message}</p>
+                        </div>
+                    </div>
+                    <div class="message-date">Vừa xong</div>
+                `;
+                $('#chatMessages').append(messageHtml);
+                scrollToBottom();
+                $('#messageInput').val('');
+
                 $.ajax({
                     url: '/send_message',
                     type: 'POST',
@@ -25,62 +44,317 @@
                     data: JSON.stringify({ receiver_id: contactId, message: message }),
                     success: function(response) {
                         if (response.status === 'success') {
-                            $('#messageInput').val('');
-                            loadMessages();
+                            if (response.message_id) {
+                                $(`#${tempId}`).attr('id', 'msg_' + response.message_id);
+                                lastMessageId = Math.max(lastMessageId, response.message_id);
+                            }
                         } else {
-                            alert('Gửi tin nhắn thất bại: ' + response.message);
+                            $(`#${tempId}`).addClass('error');
+                            $(`#${tempId} .message-content p`).text('Gửi thất bại: ' + (response.message || 'Lỗi không xác định'));
                         }
                     },
-                    error: function() {
-                        alert('Lỗi khi gửi tin nhắn');
+                    error: function(xhr, status, error) {
+                        $(`#${tempId}`).addClass('error');
+                        $(`#${tempId} .message-content p`).text('Lỗi khi gửi: ' + error);
                     }
                 });
             }
 
-            // Hàm tải tin nhắn
-            function loadMessages() {
+            // Hàm cuộn xuống cuối khung chat
+            function scrollToBottom() {
+                $('#chatMessages').scrollTop($('#chatMessages')[0].scrollHeight);
+            }
+
+            // Hàm cập nhật tin nhắn mới
+            function updateMessages() {
+                if (!contactId || isUpdating) return;
+                isUpdating = true;
+
                 $.ajax({
-                    url: '/get_messages/' + contactId,
+                    url: '/get_messages/' + contactId + '?last_id=' + lastMessageId,
+                    type: 'GET',
+                    success: function(response) {
+                        if (response.status === 'success' && response.messages && response.messages.length > 0) {
+                            let hasNewMessages = false;
+                            let hasUnseenMessages = false;
+
+                            response.messages.forEach(function(msg) {
+                                if (msg.id > lastMessageId) {
+                                    const isSent = msg.sender_id === userId;
+                                    const messageClass = isSent ? 'sent' : 'received';
+                                    const senderName = isSent ? 'Bạn' : (msg.sender_name || 'Không xác định');
+                                    const messageHtml = `
+                                        <div class="message ${messageClass}" id="msg_${msg.id}" style="animation: fadeIn 0.3s ease;">
+                                            <img src="https://i.pravatar.cc/30?img=${isSent ? 1 : 2}" alt="${senderName}">
+                                            <div class="message-content">
+                                                <p>${msg.plaintext || 'Tin nhắn không thể giải mã'}</p>
+                                            </div>
+                                        </div>
+                                        <div class="message-date">${formatMessageTime(msg.created_at) || 'Vừa xong'}</div>
+                                    `;
+                                    $('#chatMessages').append(messageHtml);
+                                    lastMessageId = Math.max(lastMessageId, msg.id || 0);
+                                    hasNewMessages = true;
+
+                                    // Nếu là tin nhắn nhận được từ người khác
+                                    if (!isSent) {
+                                        // Nếu đang trong chat với người gửi, đánh dấu là đã đọc
+                                        if (isChatActive && msg.sender_id === contactId) {
+                                            markAsRead(contactId);
+                                        } else {
+                                            // Nếu không, tăng unread count
+                                            hasUnseenMessages = true;
+                                        }
+                                    }
+                                }
+                            });
+
+                            if (hasNewMessages) {
+                                scrollToBottom();
+                            }
+
+                            // Nếu có tin nhắn mới từ cuộc trò chuyện khác, cập nhật unread counts
+                            if (hasUnseenMessages) {
+                                updateAllUnreadCounts();
+                            }
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Lỗi khi tải tin nhắn:', error);
+                    },
+                    complete: function() {
+                        isUpdating = false;
+                    }
+                });
+            }
+
+            // Hàm lấy số tin nhắn chưa đọc cho tất cả liên hệ
+            function updateAllUnreadCounts() {
+                $.ajax({
+                    url: '/get_unread_counts',
                     type: 'GET',
                     success: function(response) {
                         if (response.status === 'success') {
-                            $('#chatMessages').empty();
-                            response.messages.forEach(function(msg) {
-                                const isSent = msg.sender_id === userId;
-                                const messageClass = isSent ? 'sent' : 'received';
-                                const senderName = isSent ? 'Bạn' : msg.sender_name;
-                                const messageHtml = `
-                                    <div class="message ${messageClass}">
-                                        <img src="https://i.pravatar.cc/30?img=${isSent ? 1 : 2}" alt="${senderName}">
-                                        <div class="message-content">
-                                            <p>${msg.plaintext}</p>
-                                        </div>
-                                    </div>
-                                    <div class="message-date">${msg.created_at}</div>
-                                `;
-                                $('#chatMessages').append(messageHtml);
-                                lastMessageId = Math.max(lastMessageId, msg.id);
-                            });
-                            $('#chatMessages').scrollTop($('#chatMessages')[0].scrollHeight);
+                            unreadMessages = response.unread_counts;
+                            updateUnreadCountsUI();
                         }
                     },
-                    error: function() {
-                        alert('Lỗi khi tải tin nhắn');
+                    error: function(xhr, status, error) {
+                        console.error('Lỗi khi lấy số tin nhắn chưa đọc:', error);
                     }
                 });
+            }
+
+            // Cập nhật UI cho tất cả unread counts
+            function updateUnreadCountsUI() {
+                $('.chat-item').each(function() {
+                    const chatId = $(this).data('chat-id');
+                    const count = unreadMessages[chatId] || 0;
+                    updateUnreadCountUI(chatId, count);
+                });
+            }
+
+            // Cập nhật UI cho unread count của một chat cụ thể
+            function updateUnreadCountUI(chatId, count) {
+                const chatItem = $(`.chat-item[data-chat-id="${chatId}"]`);
+                const unreadBadge = chatItem.find('.unread-badge');
+                const isActive = chatItem.hasClass('active');
+
+                // Nếu là chat đang active, không hiển thị badge
+                if (isActive) {
+                    chatItem.find('.chat-info p').removeClass('unread');
+                    unreadBadge.remove();
+                    return;
+                }
+
+                if (count > 0) {
+                    chatItem.find('.chat-info p').addClass('unread');
+                    if (unreadBadge.length === 0) {
+                        chatItem.append(`<span class="unread-badge">${count}</span>`);
+                    } else {
+                        unreadBadge.text(count);
+                    }
+                } else {
+                    chatItem.find('.chat-info p').removeClass('unread');
+                    unreadBadge.remove();
+                }
+            }
+
+            // Đánh dấu đã đọc
+            function markAsRead(chatId) {
+                if (unreadMessages[chatId] > 0) {
+                    unreadMessages[chatId] = 0;
+                    updateUnreadCountUI(chatId, 0);
+
+                    $.ajax({
+                        url: '/mark_as_read/' + chatId,
+                        type: 'POST',
+                        success: function(response) {
+                            console.log('Đã đánh dấu đọc tin nhắn:', chatId);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Lỗi khi đánh dấu đọc:', error);
+                        }
+                    });
+                }
+            }
+
+            // Hàm định dạng thời gian tin nhắn
+            function formatMessageTime(timestamp) {
+                if (!timestamp) return '';
+
+                const date = new Date(timestamp);
+                const now = new Date();
+
+                if (date.toDateString() === now.toDateString()) {
+                    return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                } else if (date.getFullYear() === now.getFullYear()) {
+                    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+                } else {
+                    return date.toLocaleDateString('vi-VN');
+                }
             }
 
             // Gửi tin nhắn khi nhấn nút hoặc Enter
             $('#sendButton').click(sendMessage);
             $('#messageInput').keypress(function(e) {
-                if (e.which === 13) sendMessage();
+                if (e.which === 13) {
+                    sendMessage();
+                    e.preventDefault();
+                }
             });
 
-            // Tải tin nhắn ban đầu và kiểm tra tin nhắn mới mỗi 2 giây
-            loadMessages();
-            setInterval(loadMessages, 2000);
+            // Xử lý khi nhập liệu
+            $('#messageInput').on('input', function() {
+                const isTyping = $(this).val().trim().length > 0;
+                $('.input-actions').toggleClass('typing', isTyping);
+            });
+
+            // Khởi tạo chat
+            function initializeChat() {
+                if (contactId) {
+                    isChatActive = true;
+                    $('#chatHeader').text(contactName || 'Unknown Contact');
+                    $('#profile-section-name').text(contactName || 'Unknown Contact');
+
+                    updateMessages();
+                    if (messageUpdateInterval) {
+                        clearInterval(messageUpdateInterval);
+                    }
+                    messageUpdateInterval = setInterval(updateMessages, 1000);
+                    $('#chat-window').addClass('active');
+
+                    // Đánh dấu đã đọc khi mở chat
+                    markAsRead(contactId);
+                } else {
+                    isChatActive = false;
+                    $('#chat-window').removeClass('active');
+                    $('#chatMessages').html(`
+                        <div class="no-chat-message">
+                            <i class="fas fa-comments"></i>
+                            <h2>Secure Chat</h2>
+                            <p>Vui lòng chọn một liên hệ để bắt đầu trò chuyện.</p>
+                        </div>
+                    `);
+                }
+
+                // Khởi tạo UI cho tin nhắn chưa đọc
+                updateUnreadCountsUI();
+            }
+
+            // Xử lý chọn liên hệ
+            $('.chat-item').click(function() {
+                const newContactId = $(this).data('chat-id');
+                if (newContactId === contactId) return;
+
+                contactId = newContactId;
+                contactName = $(this).find('h4').text() || 'Unknown Contact';
+
+                $('.chat-item').removeClass('active');
+                $(this).addClass('active');
+                $('#chatHeader').text(contactName);
+                $('#profile-section-name').text(contactName);
+                $('#chat-window').addClass('active');
+
+                lastMessageId = 0;
+                $('#chatMessages').empty();
+
+                initializeChat();
+            });
+
+            // Xử lý toggle dropdown hồ sơ
+            $('#profileDropdown').click(function(e) {
+                e.stopPropagation();
+                $(this).toggleClass('active');
+            });
+
+            // Đóng dropdown khi click ra ngoài
+            $(document).click(function() {
+                $('#profileDropdown').removeClass('active');
+            });
+
+            // Xử lý chuyển đổi chế độ tối
+            $('#themeToggle').click(function() {
+                $('body').toggleClass('dark-mode');
+                $(this).addClass('switching');
+                setTimeout(() => $(this).removeClass('switching'), 600);
+            });
+
+            // Cập nhật tin nhắn chưa đọc định kỳ
+            setInterval(updateAllUnreadCounts, 2000);
+
+            // Theo dõi khi người dùng rời khỏi tab
+            $(window).blur(function() {
+                isChatActive = false;
+            }).focus(function() {
+                if (contactId) {
+                    isChatActive = true;
+                    markAsRead(contactId);
+                }
+            });
+
+            // Khởi tạo chat ban đầu
+            initializeChat();
         });
     </script>
+    <style>
+        /* CSS cho tin nhắn chưa đọc */
+        .chat-item .chat-info p.unread {
+            font-weight: bold;
+            color: #050505;
+        }
+
+        .unread-badge {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            min-width: 20px;
+            height: 20px;
+            background-color: #ff0000;
+            color: white;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 0 5px;
+        }
+
+        .chat-item {
+            position: relative;
+        }
+
+        .chat-item.active .chat-info p.unread {
+            font-weight: normal;
+            color: #65676B;
+        }
+
+        .chat-item.active .unread-badge {
+            display: none;
+        }
+    </style>
 </head>
 <body>
     <!-- Navbar -->
@@ -96,7 +370,7 @@
         </div>
         <div class="nav-center">
             <div class="nav-item active">
-                <i class="fas fa-home"></i>
+                <i class="fas fa-comments"></i>
             </div>
             <div class="nav-item">
                 <i class="fas fa-tv"></i>
@@ -136,7 +410,7 @@
                     </div>
                     <div class="dropdown-item">
                         <i class="fas fa-sign-out-alt"></i>
-                        <span>Đăng xuất</span>
+                        <span><a href="{{ url_for('routes.logout') }}">Đăng xuất</a></span>
                     </div>
                 </div>
             </div>
@@ -150,15 +424,13 @@
             <div class="sidebar-header">
                 <h2>Chats</h2>
                 <div class="sidebar-actions">
-                    <i class="fas fa-ellipsis-h"></i>
-                    <i class="fas fa-edit"></i>
+                    <button><i class="fas fa-ellipsis-h"></i></button>
+                    <button><i class="fas fa-edit"></i></button>
                 </div>
             </div>
             <div class="search-messenger">
                 <i class="fas fa-search"></i>
-                <input type="text" placeholder="T应用
-
-System: Tìm kiếm Messenger">
+                <input type="text" placeholder="Tìm kiếm Messenger">
             </div>
             <div class="chat-filters">
                 <button class="filter-btn active">Tất cả</button>
@@ -167,25 +439,33 @@ System: Tìm kiếm Messenger">
                 <button class="filter-btn">Cộng đồng</button>
             </div>
             <div class="chat-list">
-                <div class="chat-history-notice">
-                    Thiếu lịch sử trò chuyện. <a href="#">Khôi phục ngay</a>
-                </div>
-                <div class="chat-item active" data-chat-id="{{ contact.id }}">
-                    <img src="https://i.pravatar.cc/50?img=2" alt="{{ contact.name }}">
-                    <div class="chat-info">
-                        <h4>{{ contact.name }}</h4>
-                        <p>Tin nhắn và cuộc gọi được bảo mật bằng mã hóa đầu cuối...</p>
+                {% if not contacts %}
+                    <div class="chat-history-notice">
+                        Thiếu lịch sử trò chuyện. <a href="#">Khôi phục ngay</a>
                     </div>
-                </div>
+                {% else %}
+                    {% for contact in contacts %}
+                        <div class="chat-item {% if active_contact and contact.contact_user_id == active_contact.id %}active{% endif %}" data-chat-id="{{ contact.contact_user_id }}">
+                            <img src="https://i.pravatar.cc/50?img=2" alt="{{ contact.user.name | default('Unknown Contact') }}">
+                            <div class="chat-info">
+                                <h4>{{ contact.user.name | default('Unknown Contact') }}</h4>
+                                <p>Tin nhắn và cuộc gọi được bảo mật bằng mã hóa đầu cuối...</p>
+                            </div>
+                            {% if unread_counts.get(contact.contact_user_id, 0) > 0 %}
+                                <span class="unread-badge">{{ unread_counts.get(contact.contact_user_id, 0) }}</span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% endif %}
             </div>
         </div>
 
         <!-- Chat Window -->
-        <div class="chat-window">
+        <div class="chat-window" id="chat-window">
             <div class="chat-header">
                 <div class="chat-header-info">
-                    <img src="https://i.pravatar.cc/40?img=2" alt="{{ contact.name }}">
-                    <h3>{{ contact.name }}</h3>
+                    <img src="https://i.pravatar.cc/40?img=2" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
+                    <h3 id="chatHeader">{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}</h3>
                 </div>
                 <div class="chat-header-actions">
                     <i class="fas fa-phone"></i>
@@ -194,10 +474,12 @@ System: Tìm kiếm Messenger">
                 </div>
             </div>
             <div class="chat-messages" id="chatMessages">
-                <div class="encryption-notice">
-                    <i class="fas fa-lock"></i>
-                    <p>Tin nhắn và cuộc gọi mới được bảo mật bằng mã hóa đầu cuối. Chỉ những người trong cuộc trò chuyện này có thể đọc, nghe hoặc chia sẻ chúng. <a href="#">Tìm hiểu thêm</a></p>
-                </div>
+                {% if active_contact %}
+                    <div class="encryption-notice">
+                        <i class="fas fa-lock"></i>
+                        <p>Tin nhắn và cuộc gọi mới được bảo mật bằng mã hóa đầu cuối. Chỉ những người trong cuộc trò chuyện này có thể đọc, nghe hoặc chia sẻ chúng. <a href="#">Tìm hiểu thêm</a></p>
+                    </div>
+                {% endif %}
             </div>
             <div class="chat-input">
                 <div class="input-actions">
@@ -207,11 +489,11 @@ System: Tìm kiếm Messenger">
                     <i class="fas fa-gift"></i>
                 </div>
                 <div class="input-field">
-                    <input type="text" placeholder="Aa" id="messageInput">
+                    <input type="text" placeholder="Nhập tin nhắn..." id="messageInput">
                     <i class="fas fa-smile"></i>
                 </div>
                 <button id="sendButton" type="button">
-                    <i class="fas fa-thumbs-up"></i>
+                    <i class="fas fa-paper-plane"></i>
                 </button>
             </div>
         </div>
@@ -219,8 +501,8 @@ System: Tìm kiếm Messenger">
         <!-- Chat Info Panel -->
         <div class="chat-info-panel">
             <div class="profile-section">
-                <img src="https://i.pravatar.cc/80?img=2" alt="{{ contact.name }}">
-                <h3>{{ contact.name }}</h3>
+                <img src="https://i.pravatar.cc/80?img=2" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
+                <h3 id="profile-section-name">{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}</h3>
                 <div class="encryption-status">
                     <i class="fas fa-lock"></i>
                     <span>Mã hóa đầu cuối</span>
@@ -238,9 +520,7 @@ System: Tìm kiếm Messenger">
                         <i class="fas fa-search"></i>
                         <span>Tìm kiếm</span>
                     </button>
-                </شتی
-
-System: div>
+                </div>
             </div>
             <div class="info-sections">
                 <div class="info-section">
@@ -269,7 +549,6 @@ System: div>
                 </div>
             </div>
         </div>
-    </div>
     </div>
 </body>
 </html>
