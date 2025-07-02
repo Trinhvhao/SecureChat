@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Chat - Auth</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .auth-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .toggle-link {
+            cursor: pointer;
+            color: #007bff;
+        }
+        .toggle-link:hover {
+            text-decoration: underline;
+        }
+        .error-message {
+            color: red;
+            font-size: 0.9em;
+            display: none;
+        }
+        .alert {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container auth-container">
+        <!-- Hiển thị thông báo lỗi hoặc thành công -->
+        <div id="alert" class="alert" style="display: none;"></div>
+
+        <!-- Login Form -->
+        <div id="login-form">
+            <h2 class="text-center mb-4">Login</h2>
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label for="loginGmail" class="form-label">Gmail</label>
+                    <input type="email" class="form-control" id="loginGmail" name="gmail" required>
+                </div>
+                <div class="mb-3">
+                    <label for="loginPassword" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="loginPassword" name="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Login</button>
+                <p class="text-center mt-3">Don't have an account? <span class="toggle-link" onclick="showRegister()">Register here</span></p>
+            </form>
+        </div>
+
+        <!-- Register Form -->
+        <div id="register-form" style="display: none;">
+            <h2 class="text-center mb-4">Register</h2>
+            <form id="registerForm">
+                <div class="mb-3">
+                    <label for="registerName" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="registerName" name="name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="registerGmail" class="form-label">Gmail</label>
+                    <input type="email" class="form-control" id="registerGmail" name="gmail" required>
+                </div>
+                <div class="mb-3">
+                    <label for="registerPassword" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="registerPassword" name="password" required>
+                </div>
+                <div class="mb-3">
+                    <label for="confirmPassword" class="form-label">Confirm Password</label>
+                    <input type="password" class="form-control" id="confirmPassword" name="confirm_password" required>
+                    <span id="passwordError" class="error-message">Passwords do not match</span>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Register</button>
+                <p class="text-center mt-3">Already have an account? <span class="toggle-link" onclick="showLogin()">Login here</span></p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showRegister() {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('register-form').style.display = 'block';
+            document.getElementById('alert').style.display = 'none';
+        }
+
+        function showLogin() {
+            document.getElementById('register-form').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
+            document.getElementById('alert').style.display = 'none';
+        }
+
+        function showAlert(message, isError = true) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = isError ? 'alert alert-danger' : 'alert alert-success';
+            alert.style.display = 'block';
+        }
+
+        function validatePassword() {
+            const password = document.getElementById('registerPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const errorElement = document.getElementById('passwordError');
+            if (password !== confirmPassword) {
+                errorElement.style.display = 'block';
+                return false;
+            }
+            errorElement.style.display = 'none';
+            return true;
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = {
+                gmail: formData.get('gmail'),
+                password: formData.get('password')
+            };
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    window.location.href = '/';
+                } else {
+                    showAlert(result.error);
+                }
+            } catch (err) {
+                showAlert('An error occurred. Please try again.');
+            }
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!validatePassword()) return;
+            const formData = new FormData(e.target);
+            const data = {
+                name: formData.get('name'),
+                gmail: formData.get('gmail'),
+                password: formData.get('password'),
+                confirm_password: formData.get('confirm_password')
+            };
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    window.location.href = '/';
+                } else {
+                    showAlert(result.error);
+                }
+            } catch (err) {
+                showAlert('An error occurred. Please try again.');
+            }
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

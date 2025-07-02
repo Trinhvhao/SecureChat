@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Chat</title>
+       <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            const userId = {{ user.id }};
+            const contactId = {{ contact.id }};
+            const contactName = "{{ contact.name }}";
+            let lastMessageId = 0;
+
+            // Hàm gửi tin nhắn
+            function sendMessage() {
+                const message = $('#messageInput').val();
+                if (!message) return;
+                $.ajax({
+                    url: '/send_message',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ receiver_id: contactId, message: message }),
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            $('#messageInput').val('');
+                            loadMessages();
+                        } else {
+                            alert('Gửi tin nhắn thất bại: ' + response.message);
+                        }
+                    },
+                    error: function() {
+                        alert('Lỗi khi gửi tin nhắn');
+                    }
+                });
+            }
+
+            // Hàm tải tin nhắn
+            function loadMessages() {
+                $.ajax({
+                    url: '/get_messages/' + contactId,
+                    type: 'GET',
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            $('#chatMessages').empty();
+                            response.messages.forEach(function(msg) {
+                                const isSent = msg.sender_id === userId;
+                                const messageClass = isSent ? 'sent' : 'received';
+                                const senderName = isSent ? 'Bạn' : msg.sender_name;
+                                const messageHtml = `
+                                    <div class="message ${messageClass}">
+                                        <img src="https://i.pravatar.cc/30?img=${isSent ? 1 : 2}" alt="${senderName}">
+                                        <div class="message-content">
+                                            <p>${msg.plaintext}</p>
+                                        </div>
+                                    </div>
+                                    <div class="message-date">${msg.created_at}</div>
+                                `;
+                                $('#chatMessages').append(messageHtml);
+                                lastMessageId = Math.max(lastMessageId, msg.id);
+                            });
+                            $('#chatMessages').scrollTop($('#chatMessages')[0].scrollHeight);
+                        }
+                    },
+                    error: function() {
+                        alert('Lỗi khi tải tin nhắn');
+                    }
+                });
+            }
+
+            // Gửi tin nhắn khi nhấn nút hoặc Enter
+            $('#sendButton').click(sendMessage);
+            $('#messageInput').keypress(function(e) {
+                if (e.which === 13) sendMessage();
+            });
+
+            // Tải tin nhắn ban đầu và kiểm tra tin nhắn mới mỗi 2 giây
+            loadMessages();
+            setInterval(loadMessages, 2000);
+        });
+    </script>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-left">
+            <div class="fb-logo">
+                <i class="fab fa-facebook"></i>
+            </div>
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Tìm kiếm trên Facebook">
+            </div>
+        </div>
+        <div class="nav-center">
+            <div class="nav-item active">
+                <i class="fas fa-home"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fas fa-tv"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fas fa-store"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fas fa-user-friends"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fas fa-gamepad"></i>
+            </div>
+        </div>
+        <div class="nav-right">
+            <div class="nav-icon">
+                <i class="fas fa-th"></i>
+            </div>
+            <div class="nav-icon" id="themeToggle">
+                <i class="fas fa-moon"></i>
+            </div>
+            <div class="nav-icon">
+                <i class="fas fa-bell"></i>
+            </div>
+            <div class="nav-profile" id="profileDropdown">
+                <div class="profile-wrapper">
+                    <img src="https://i.pravatar.cc/40?img=1" alt="Hồ sơ">
+                    <span class="status-dot"></span>
+                    <div class="arrow-wrapper">
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="profile-dropdown">
+                    <div class="dropdown-item">
+                        <i class="fas fa-user"></i>
+                        <span>Thông tin tài khoản</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Đăng xuất</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="messenger-container">
+        <!-- Sidebar - Chat List -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>Chats</h2>
+                <div class="sidebar-actions">
+                    <i class="fas fa-ellipsis-h"></i>
+                    <i class="fas fa-edit"></i>
+                </div>
+            </div>
+            <div class="search-messenger">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="T应用
+
+System: Tìm kiếm Messenger">
+            </div>
+            <div class="chat-filters">
+                <button class="filter-btn active">Tất cả</button>
+                <button class="filter-btn">Chưa đọc</button>
+                <button class="filter-btn">Nhóm</button>
+                <button class="filter-btn">Cộng đồng</button>
+            </div>
+            <div class="chat-list">
+                <div class="chat-history-notice">
+                    Thiếu lịch sử trò chuyện. <a href="#">Khôi phục ngay</a>
+                </div>
+                <div class="chat-item active" data-chat-id="{{ contact.id }}">
+                    <img src="https://i.pravatar.cc/50?img=2" alt="{{ contact.name }}">
+                    <div class="chat-info">
+                        <h4>{{ contact.name }}</h4>
+                        <p>Tin nhắn và cuộc gọi được bảo mật bằng mã hóa đầu cuối...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Window -->
+        <div class="chat-window">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <img src="https://i.pravatar.cc/40?img=2" alt="{{ contact.name }}">
+                    <h3>{{ contact.name }}</h3>
+                </div>
+                <div class="chat-header-actions">
+                    <i class="fas fa-phone"></i>
+                    <i class="fas fa-video"></i>
+                    <i class="fas fa-info-circle"></i>
+                </div>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="encryption-notice">
+                    <i class="fas fa-lock"></i>
+                    <p>Tin nhắn và cuộc gọi mới được bảo mật bằng mã hóa đầu cuối. Chỉ những người trong cuộc trò chuyện này có thể đọc, nghe hoặc chia sẻ chúng. <a href="#">Tìm hiểu thêm</a></p>
+                </div>
+            </div>
+            <div class="chat-input">
+                <div class="input-actions">
+                    <i class="fas fa-plus-circle"></i>
+                    <i class="fas fa-image"></i>
+                    <i class="fas fa-sticky-note"></i>
+                    <i class="fas fa-gift"></i>
+                </div>
+                <div class="input-field">
+                    <input type="text" placeholder="Aa" id="messageInput">
+                    <i class="fas fa-smile"></i>
+                </div>
+                <button id="sendButton" type="button">
+                    <i class="fas fa-thumbs-up"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Info Panel -->
+        <div class="chat-info-panel">
+            <div class="profile-section">
+                <img src="https://i.pravatar.cc/80?img=2" alt="{{ contact.name }}">
+                <h3>{{ contact.name }}</h3>
+                <div class="encryption-status">
+                    <i class="fas fa-lock"></i>
+                    <span>Mã hóa đầu cuối</span>
+                </div>
+                <div class="profile-actions">
+                    <button>
+                        <i class="fas fa-user-circle"></i>
+                        <span>Hồ sơ</span>
+                    </button>
+                    <button>
+                        <i class="fas fa-bell-slash"></i>
+                        <span>Tắt thông báo</span>
+                    </button>
+                    <button>
+                        <i class="fas fa-search"></i>
+                        <span>Tìm kiếm</span>
+                    </button>
+                </شتی
+
+System: div>
+            </div>
+            <div class="info-sections">
+                <div class="info-section">
+                    <div class="section-header">
+                        <h4>Thông tin trò chuyện</h4>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="info-section">
+                    <div class="section-header">
+                        <h4>Tùy chỉnh trò chuyện</h4>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="info-section">
+                    <div class="section-header">
+                        <h4>Media & tệp</h4>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="info-section">
+                    <div class="section-header">
+                        <h4>Quyền riêng tư & hỗ trợ</h4>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+</body>
+</html>

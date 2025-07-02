@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Secure Chat</title>
+</head>
+<body>
+    <h1>Secure Chat</h1>
+    {% if message %}
+        <p style="color: green;">{{ message }}</p>
+    {% endif %}
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+    <h2>Your Contacts</h2>
+    <select id="receiverSelect">
+        <option value="">Select a contact</option>
+        {% for contact in contacts %}
+            <option value="{{ contact.contact_user_id }}">{{ contact.user.name }} ({{ contact.user.gmail }})</option>
+        {% endfor %}
+    </select>
+    <br><br>
+    <textarea id="messageInput" placeholder="Type your message"></textarea>
+    <br>
+    <button onclick="sendMessage()">Send Message</button>
+    <button onclick="goToChat()">Go to Chat</button>
+    <br><br>
+    <h2>Send Invitation</h2>
+    <input type="email" id="invitationEmail" placeholder="Enter email to invite" required>
+    <br>
+    <button onclick="sendInvitation()">Send Invitation</button>
+    <br><br>
+    <a href="{{ url_for('routes.logout') }}">Logout</a>
+    <script>
+        async function sendMessage() {
+            const receiverId = document.getElementById('receiverSelect').value;
+            const message = document.getElementById('messageInput').value;
+            if (!receiverId || !message) {
+                alert("Please select a contact and enter a message.");
+                return;
+            }
+
+            const response = await fetch('/send_message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ receiver_id: receiverId, message: message })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                document.getElementById('messageInput').value = '';
+                window.location.href = `/chat/${receiverId}`; // Chuyển hướng sang chat
+            } else {
+                alert(result.message);
+            }
+        }
+
+        function goToChat() {
+            const receiverId = document.getElementById('receiverSelect').value;
+            if (!receiverId) {
+                alert("Please select a contact.");
+                return;
+            }
+            window.location.href = `/chat/${receiverId}`; // Chuyển hướng sang chat
+        }
+
+        async function sendInvitation() {
+            const email = document.getElementById('invitationEmail').value;
+            if (!email) {
+                alert("Please enter an email address.");
+                return;
+            }
+
+            const response = await fetch('/send_invitation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ receiver_gmail: email })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                alert(result.message);
+                document.getElementById('invitationEmail').value = '';
+            } else {
+                alert(result.message);
+            }
+        }
+    </script>
+</body>
+</html>
