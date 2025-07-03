@@ -18,6 +18,59 @@
             let unreadMessages = {{ unread_counts | tojson | safe }};
             let isChatActive = false; // Theo dõi trạng thái chat window có đang active không
 
+            // Hàm gửi lời mời
+            function sendInvitation() {
+                const receiverGmail = $('#inviteEmail').val().trim();
+                if (!receiverGmail) {
+                    $('#inviteMessage').removeClass('success').addClass('error').text('Vui lòng nhập email người nhận.');
+                    return;
+                }
+
+                $.ajax({
+                    url: '/send_invitation',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ receiver_gmail: receiverGmail }),
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            $('#inviteMessage').removeClass('error').addClass('success').text('Lời mời đã được gửi.');
+                            $('#inviteEmail').val(''); // Xóa input
+                            setTimeout(() => {
+                                $('#inviteMessage').text('');
+                                $('#inviteModal').hide(); // Đóng modal
+                            }, 2000);
+                        } else {
+                            $('#inviteMessage').removeClass('success').addClass('error').text(response.error || 'Lỗi khi gửi lời mời.');
+                        }
+                    },
+                    error: function(xhr) {
+                        const errorMsg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Lỗi khi gửi lời mời.';
+                        $('#inviteMessage').removeClass('success').addClass('error').text(errorMsg);
+                    }
+                });
+            }
+
+            // Mở modal khi click nút thêm người
+            $('#addContactButton').click(function() {
+                $('#inviteModal').show();
+            });
+
+            // Đóng modal khi click nút hủy
+            $('#cancelInviteButton').click(function() {
+                $('#inviteModal').hide();
+                $('#inviteEmail').val('');
+                $('#inviteMessage').text('');
+            });
+
+            // Gửi lời mời khi nhấn nút hoặc Enter
+            $('#inviteButton').click(sendInvitation);
+            $('#inviteEmail').keypress(function(e) {
+                if (e.which === 13) {
+                    sendInvitation();
+                    e.preventDefault();
+                }
+            });
+
             // Hàm gửi tin nhắn
             function sendMessage() {
                 const message = $('#messageInput').val().trim();
@@ -26,7 +79,7 @@
                 const tempId = 'temp_' + Date.now();
                 const messageHtml = `
                     <div class="message sent" id="${tempId}" style="animation: fadeIn 0.3s ease;">
-                        <img src="https://i.pravatar.cc/30?img=1" alt="Bạn">
+                        <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="Bạn">
                         <div class="message-content">
                             <p>${message}</p>
                         </div>
@@ -50,7 +103,7 @@
                             }
                         } else {
                             $(`#${tempId}`).addClass('error');
-                            $(`#${tempId} .message-content p`).text('Gửi thất bại: ' + (response.message || 'Lỗi không xác định'));
+                            $(`#${tempId} .message-content p`).text('Gửi thất bại: ' + (response.error || 'Lỗi không xác định'));
                         }
                     },
                     error: function(xhr, status, error) {
@@ -76,7 +129,6 @@
                     success: function(response) {
                         if (response.status === 'success' && response.messages && response.messages.length > 0) {
                             let hasNewMessages = false;
-                            let hasUnseenMessages = false;
 
                             response.messages.forEach(function(msg) {
                                 if (msg.id > lastMessageId) {
@@ -85,7 +137,7 @@
                                     const senderName = isSent ? 'Bạn' : (msg.sender_name || 'Không xác định');
                                     const messageHtml = `
                                         <div class="message ${messageClass}" id="msg_${msg.id}" style="animation: fadeIn 0.3s ease;">
-                                            <img src="https://i.pravatar.cc/30?img=${isSent ? 1 : 2}" alt="${senderName}">
+                                            <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="${senderName}">
                                             <div class="message-content">
                                                 <p>${msg.plaintext || 'Tin nhắn không thể giải mã'}</p>
                                             </div>
@@ -96,15 +148,9 @@
                                     lastMessageId = Math.max(lastMessageId, msg.id || 0);
                                     hasNewMessages = true;
 
-                                    // Nếu là tin nhắn nhận được từ người khác
-                                    if (!isSent) {
-                                        // Nếu đang trong chat với người gửi, đánh dấu là đã đọc
-                                        if (isChatActive && msg.sender_id === contactId) {
-                                            markAsRead(contactId);
-                                        } else {
-                                            // Nếu không, tăng unread count
-                                            hasUnseenMessages = true;
-                                        }
+                                    // Nếu là tin nhắn nhận được từ contact hiện tại, đánh dấu là đã đọc
+                                    if (!isSent && msg.sender_id === contactId) {
+                                        markAsRead(contactId);
                                     }
                                 }
                             });
@@ -112,15 +158,10 @@
                             if (hasNewMessages) {
                                 scrollToBottom();
                             }
-
-                            // Nếu có tin nhắn mới từ cuộc trò chuyện khác, cập nhật unread counts
-                            if (hasUnseenMessages) {
-                                updateAllUnreadCounts();
-                            }
                         }
                     },
                     error: function(xhr, status, error) {
-                        console.error('Lỗi khi tải tin nhắn:', error);
+                        console.error('Lỗi khi tải tin nhắn:', { status: status, error: error, response: xhr.responseJSON });
                     },
                     complete: function() {
                         isUpdating = false;
@@ -140,7 +181,7 @@
                         }
                     },
                     error: function(xhr, status, error) {
-                        console.error('Lỗi khi lấy số tin nhắn chưa đọc:', error);
+                        console.error('Lỗi khi lấy số tin nhắn chưa đọc:', { status: status, error: error, response: xhr.responseJSON });
                     }
                 });
             }
@@ -190,10 +231,13 @@
                         url: '/mark_as_read/' + chatId,
                         type: 'POST',
                         success: function(response) {
-                            console.log('Đã đánh dấu đọc tin nhắn:', chatId);
+                            if (response.status === 'success') {
+                                console.log('Đã đánh dấu đọc tin nhắn:', chatId, response);
+                                updateAllUnreadCounts();
+                            }
                         },
                         error: function(xhr, status, error) {
-                            console.error('Lỗi khi đánh dấu đọc:', error);
+                            console.error('Lỗi khi đánh dấu đọc:', { status: status, error: error, response: xhr.responseJSON });
                         }
                     });
                 }
@@ -230,6 +274,26 @@
                 $('.input-actions').toggleClass('typing', isTyping);
             });
 
+            // Hàm hiển thị loading
+            function showLoading() {
+                $('#chatLoading').show();
+                $('#chatMessages').hide();
+            }
+
+            // Hàm hiển thị thông báo thành công
+            function showSuccess() {
+                $('#chatSuccess').show();
+                setTimeout(() => {
+                    $('#chatSuccess').hide();
+                    $('#chatMessages').show();
+                }, 2000); // Ẩn sau 2 giây
+            }
+
+            // Hàm ẩn loading
+            function hideLoading() {
+                $('#chatLoading').hide();
+            }
+
             // Khởi tạo chat
             function initializeChat() {
                 if (contactId) {
@@ -237,6 +301,11 @@
                     $('#chatHeader').text(contactName || 'Unknown Contact');
                     $('#profile-section-name').text(contactName || 'Unknown Contact');
 
+                    // Xóa danh sách tin nhắn cũ
+                    $('#chatMessages').empty();
+                    lastMessageId = 0;
+
+                    // Gọi updateMessages để tải tin nhắn
                     updateMessages();
                     if (messageUpdateInterval) {
                         clearInterval(messageUpdateInterval);
@@ -279,7 +348,53 @@
                 lastMessageId = 0;
                 $('#chatMessages').empty();
 
-                initializeChat();
+                // Hiển thị loading khi click
+                showLoading();
+
+                // Gọi handshake thực sự
+                $.ajax({
+                    url: '/get_handshake_signal',
+                    type: 'GET',
+                    success: function(response) {
+                        if (response.signal) {
+                            $.ajax({
+                                url: '/handshake',
+                                type: 'POST',
+                                contentType: 'application/json',
+                                data: JSON.stringify({
+                                    receiver_id: contactId,
+                                    signal: response.signal
+                                }),
+                                success: function(handshakeResponse) {
+                                    if (handshakeResponse.status === 'success') {
+                                        console.log('Handshake successful for contact:', contactId);
+                                        hideLoading();
+                                        showSuccess();
+                                        initializeChat();
+                                    } else {
+                                        console.error('Handshake failed:', handshakeResponse.error);
+                                        hideLoading();
+                                        alert('Không thể thiết lập kết nối bảo mật: ' + handshakeResponse.error);
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    console.error('Handshake error:', { status: status, error: error, response: xhr.responseJSON });
+                                    hideLoading();
+                                    alert('Lỗi khi thiết lập kết nối bảo mật');
+                                }
+                            });
+                        } else {
+                            console.error('No signal received from get_handshake_signal');
+                            hideLoading();
+                            alert('Lỗi khi lấy tín hiệu handshake');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Failed to get handshake signal:', { status: status, error: error, response: xhr.responseJSON });
+                        hideLoading();
+                        alert('Lỗi khi lấy tín hiệu handshake');
+                    }
+                });
             });
 
             // Xử lý toggle dropdown hồ sơ
@@ -301,7 +416,7 @@
             });
 
             // Cập nhật tin nhắn chưa đọc định kỳ
-            setInterval(updateAllUnreadCounts, 2000);
+            setInterval(updateAllUnreadCounts, 1000);
 
             // Theo dõi khi người dùng rời khỏi tab
             $(window).blur(function() {
@@ -318,6 +433,58 @@
         });
     </script>
     <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* CSS cho logo mới */
+        .fb-logo img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+        }
+
+        /* CSS cho ảnh đại diện */
+        .chat-item img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .chat-header-info img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .profile-section img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-bottom: 10px;
+        }
+
+        .nav-profile img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .message img {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 10px;
+        }
+
         /* CSS cho tin nhắn chưa đọc */
         .chat-item .chat-info p.unread {
             font-weight: bold;
@@ -344,6 +511,9 @@
 
         .chat-item {
             position: relative;
+            display: flex;
+            align-items: center;
+            padding: 10px;
         }
 
         .chat-item.active .chat-info p.unread {
@@ -354,6 +524,238 @@
         .chat-item.active .unread-badge {
             display: none;
         }
+
+        /* CSS cho tin nhắn lỗi */
+        .message.error .message-content {
+            background-color: #ffcccc;
+            color: #721c24;
+        }
+
+        /* CSS cho nút thêm liên hệ */
+        .sidebar-actions button.add-contact {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            color: #050505;
+            padding: 8px;
+        }
+
+        .sidebar-actions button.add-contact:hover {
+            background-color: #f0f2f5;
+            border-radius: 50%;
+        }
+
+        /* CSS cho modal gửi lời mời */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+            max-width: 90%;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-content h4 {
+            margin: 0 0 15px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #050505;
+        }
+
+        .modal-content input[type="email"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .modal-content .button-group {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .modal-content button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .modal-content #inviteButton {
+            background-color: #1877F2;
+            color: white;
+        }
+
+        .modal-content #inviteButton:hover {
+            background-color: #165db7;
+        }
+
+        .modal-content #cancelInviteButton {
+            background-color: #e4e6eb;
+            color: #050505;
+        }
+
+        .modal-content #cancelInviteButton:hover {
+            background-color: #d8dade;
+        }
+
+        .modal-content .success {
+            color: #28a745;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .modal-content .error {
+            color: #dc3545;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        /* CSS cho trạng thái loading */
+        #chatLoading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+        }
+
+        #chatLoading .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1877F2;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        #chatLoading p {
+            color: #050505;
+            font-size: 16px;
+            margin: 0;
+        }
+
+        /* CSS cho thông báo thành công */
+        #chatSuccess {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        #chatSuccess .success-icon {
+            font-size: 40px;
+            color: #28a745;
+        }
+
+        #chatSuccess p {
+            margin: 10px 0 0;
+            font-size: 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Dark mode */
+        .dark-mode .sidebar-actions button.add-contact {
+            color: #e4e6eb;
+        }
+
+        .dark-mode .sidebar-actions button.add-contact:hover {
+            background-color: #3a3b3c;
+        }
+
+        .dark-mode .modal-content {
+            background-color: #242526;
+        }
+
+        .dark-mode .modal-content h4 {
+            color: #e4e6eb;
+        }
+
+        .dark-mode .modal-content input[type="email"] {
+            background-color: #3a3b3c;
+            border-color: #4a4b4d;
+            color: #e4e6eb;
+        }
+
+        .dark-mode .modal-content #inviteButton {
+            background-color: #1667d1;
+        }
+
+        .dark-mode .modal-content #inviteButton:hover {
+            background-color: #1254a3;
+        }
+
+        .dark-mode .modal-content #cancelInviteButton {
+            background-color: #3a3b3c;
+            color: #e4e6eb;
+        }
+
+        .dark-mode .modal-content #cancelInviteButton:hover {
+            background-color: #4a4b4d;
+        }
+
+        .dark-mode .modal-content .success {
+            color: #28a745;
+        }
+
+        .dark-mode .modal-content .error {
+            color: #dc3545;
+        }
+
+        .dark-mode .message.error .message-content {
+            background-color: #4a2525;
+            color: #f8d7da;
+        }
+
+        .dark-mode #chatLoading p {
+            color: #e4e6eb;
+        }
+
+        .dark-mode #chatLoading .spinner {
+            border-color: #3a3b3c;
+            border-top-color: #1667d1;
+        }
+
+        .dark-mode #chatSuccess {
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #050505;
+        }
+
+        .dark-mode #chatSuccess .success-icon {
+            color: #28a745;
+        }
     </style>
 </head>
 <body>
@@ -361,11 +763,11 @@
     <nav class="navbar">
         <div class="nav-left">
             <div class="fb-logo">
-                <i class="fab fa-facebook"></i>
+                <img src="{{ url_for('static', filename='img/encrypted.png') }}" alt="Logo">
             </div>
             <div class="search-box">
                 <i class="fas fa-search"></i>
-                <input type="text" placeholder="Tìm kiếm trên Facebook">
+                <input type="text" placeholder="Tìm kiếm trên SecureChat">
             </div>
         </div>
         <div class="nav-center">
@@ -397,7 +799,7 @@
             </div>
             <div class="nav-profile" id="profileDropdown">
                 <div class="profile-wrapper">
-                    <img src="https://i.pravatar.cc/40?img=1" alt="Hồ sơ">
+                    <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ user.name | default('User') }}">
                     <span class="status-dot"></span>
                     <div class="arrow-wrapper">
                         <i class="fas fa-chevron-down"></i>
@@ -426,6 +828,7 @@
                 <div class="sidebar-actions">
                     <button><i class="fas fa-ellipsis-h"></i></button>
                     <button><i class="fas fa-edit"></i></button>
+                    <button class="add-contact" id="addContactButton"><i class="fas fa-user-plus"></i></button>
                 </div>
             </div>
             <div class="search-messenger">
@@ -446,7 +849,7 @@
                 {% else %}
                     {% for contact in contacts %}
                         <div class="chat-item {% if active_contact and contact.contact_user_id == active_contact.id %}active{% endif %}" data-chat-id="{{ contact.contact_user_id }}">
-                            <img src="https://i.pravatar.cc/50?img=2" alt="{{ contact.user.name | default('Unknown Contact') }}">
+                            <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ contact.user.name | default('Unknown Contact') }}">
                             <div class="chat-info">
                                 <h4>{{ contact.user.name | default('Unknown Contact') }}</h4>
                                 <p>Tin nhắn và cuộc gọi được bảo mật bằng mã hóa đầu cuối...</p>
@@ -464,7 +867,7 @@
         <div class="chat-window" id="chat-window">
             <div class="chat-header">
                 <div class="chat-header-info">
-                    <img src="https://i.pravatar.cc/40?img=2" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
+                    <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
                     <h3 id="chatHeader">{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}</h3>
                 </div>
                 <div class="chat-header-actions">
@@ -480,6 +883,16 @@
                         <p>Tin nhắn và cuộc gọi mới được bảo mật bằng mã hóa đầu cuối. Chỉ những người trong cuộc trò chuyện này có thể đọc, nghe hoặc chia sẻ chúng. <a href="#">Tìm hiểu thêm</a></p>
                     </div>
                 {% endif %}
+            </div>
+            <!-- Thêm phần loading -->
+            <div id="chatLoading">
+                <div class="spinner"></div>
+                <p>Đang thiết lập kết nối bảo mật...</p>
+            </div>
+            <!-- Thêm phần thông báo thành công -->
+            <div id="chatSuccess">
+                <i class="fas fa-check success-icon"></i>
+                <p>Kết nối bảo mật đã thiết lập thành công!</p>
             </div>
             <div class="chat-input">
                 <div class="input-actions">
@@ -501,7 +914,7 @@
         <!-- Chat Info Panel -->
         <div class="chat-info-panel">
             <div class="profile-section">
-                <img src="https://i.pravatar.cc/80?img=2" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
+                <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
                 <h3 id="profile-section-name">{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}</h3>
                 <div class="encryption-status">
                     <i class="fas fa-lock"></i>
@@ -548,6 +961,19 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal gửi lời mời -->
+    <div class="modal" id="inviteModal">
+        <div class="modal-content">
+            <h4>Thêm liên hệ mới</h4>
+            <input type="email" id="inviteEmail" placeholder="Nhập email người nhận">
+            <div class="button-group">
+                <button id="cancelInviteButton">Hủy</button>
+                <button id="inviteButton">Gửi lời mời</button>
+            </div>
+            <p id="inviteMessage"></p>
         </div>
     </div>
 </body>

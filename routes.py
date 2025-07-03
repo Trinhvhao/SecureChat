@@ -22,7 +22,6 @@ from utils import (
 from datetime import datetime, timedelta
 from functools import wraps
 import logging
-import base64
 import re
 import requests
 
@@ -43,12 +42,11 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            logger.warning(f"Session user_id not found, redirecting to auth. Session: {dict(session)}")
             return redirect(url_for('routes.auth', next=request.url))
         user = User.query.get(session['user_id'])
         if not user:
-            logger.warning(f"User not found for user_id={session['user_id']}, clearing session")
             session.pop('user_id', None)
+            logger.error(f"User not found for user_id={session['user_id']}")
             return redirect(url_for('routes.auth', next=request.url))
         return f(*args, **kwargs)
     return decorated_function
@@ -80,7 +78,7 @@ def send_invitation_email(sender_gmail, receiver_gmail, token):
         server.login(Config.SMTP_EMAIL, Config.SMTP_PASSWORD)
         server.sendmail(Config.SMTP_EMAIL, receiver_gmail, msg.as_string())
         server.quit()
-        logger.info(f"Sent invitation email to {receiver_gmail} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Sent invitation email to {receiver_gmail}")
         return True
     except Exception as e:
         logger.error(f"Failed to send email to {receiver_gmail}: {str(e)}")
@@ -98,15 +96,14 @@ def index():
 # Route render trang auth
 @bp.route('/auth', methods=['GET'])
 def auth():
-    logger.debug(f"Session data: {dict(session)}")
     if 'user_id' in session:
         user = User.query.get(session['user_id'])
         if user:
             if 'session_start' in session:
                 session_age = datetime.now(vn_timezone) - session['session_start']
                 if session_age > app.config['PERMANENT_SESSION_LIFETIME']:
-                    logger.warning(f"Session expired for user_id={user.id}")
                     session.clear()
+                    logger.warning(f"Session expired for user_id={user.id}")
                     return render_template('auth.html', error="Session expired, please log in again")
             return redirect(url_for('routes.chat'))
     return render_template('auth.html')
@@ -127,7 +124,7 @@ def login():
             session['user_id'] = user.id
             session['session_start'] = datetime.now(vn_timezone)
             session.permanent = True
-            logger.info(f"User logged in successfully: {gmail}, user_id={user.id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"User logged in successfully: {gmail}, user_id={user.id}")
             return jsonify({
                 "status": "success",
                 "message": "Login successful",
@@ -174,7 +171,7 @@ def register():
         session['user_id'] = user.id
         session['session_start'] = datetime.now(vn_timezone)
         session.permanent = True
-        logger.info(f"User registered successfully: {gmail}, user_id={user.id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"User registered successfully: {gmail}, user_id={user.id}")
         return jsonify({
             "status": "success",
             "message": "User registered successfully",
@@ -217,7 +214,7 @@ def send_invitation():
         db.session.add(invitation)
         db.session.commit()
         if send_invitation_email(user.gmail, receiver_gmail, token):
-            logger.info(f"Invitation sent from {user.gmail} to {receiver_gmail} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Invitation sent from {user.gmail} to {receiver_gmail}")
             return jsonify({"status": "success", "message": "Invitation sent successfully"}), 200
         logger.error(f"Failed to send invitation email to {receiver_gmail}")
         return jsonify({"status": "error", "message": "Failed to send invitation email"}), 500
@@ -269,7 +266,7 @@ def confirm_invitation():
         contact2 = Contact(user_id=receiver.id, contact_user_id=invitation.sender_id, created_at=datetime.now(vn_timezone))
         db.session.add_all([contact1, contact2])
         db.session.commit()
-        logger.info(f"Invitation accepted: sender_id={invitation.sender_id}, receiver_gmail={invitation.receiver_gmail} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Invitation accepted: sender_id={invitation.sender_id}, receiver_gmail={invitation.receiver_gmail}")
         return redirect(url_for('routes.chat', message="Invitation accepted. You can now chat!"))
     except Exception as e:
         db.session.rollback()
@@ -292,7 +289,7 @@ def handshake():
             return jsonify({"status": "error", "message": "Invalid receiver ID"}), 400
 
         if signal == handshake_initiate():
-            logger.info(f"Handshake initiated by user_id={user_id} to receiver_id={receiver_id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Handshake initiated by user_id={user_id} to receiver_id={receiver_id}")
             return jsonify({
                 "status": "success",
                 "response": handshake_respond(),
@@ -319,7 +316,7 @@ def handshake():
             )
             db.session.add(db_session)
             db.session.commit()
-            logger.info(f"Handshake completed: session_id={db_session.id}, user_id={user_id}, receiver_id={receiver_id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Handshake completed: session_id={db_session.id}, user_id={user_id}, receiver_id={receiver_id}")
             return jsonify({
                 "status": "success",
                 "message": "Handshake completed",
@@ -378,7 +375,7 @@ def exchange_key():
                 db.session.add(reverse_session)
             reverse_session.triple_des_key = encrypted_key_for_receiver
             db.session.commit()
-            logger.info(f"Key exchanged successfully: session_id={db_session.id}, user_id={user_id}, receiver_id={receiver_id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Key exchanged successfully: session_id={db_session.id}, user_id={user_id}, receiver_id={receiver_id}")
             return jsonify({
                 "status": "success",
                 "message": "Key exchanged successfully",
@@ -475,7 +472,7 @@ def send_message():
         )
         db.session.add(msg)
         db.session.commit()
-        logger.info(f"Message sent successfully: message_id={msg.id}, user_id={user_id}, receiver_id={receiver_id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Message sent successfully: message_id={msg.id}, user_id={user_id}, receiver_id={receiver_id}")
         return jsonify({
             "status": "success",
             "message": "Message sent successfully",
@@ -494,8 +491,8 @@ def chat(contact_id=None):
     user_id = session['user_id']
     user = User.query.get(user_id)
     if not user:
-        logger.warning(f"User not found for user_id={user_id}, clearing session")
         session.pop('user_id', None)
+        logger.error(f"User not found for user_id={user_id}")
         return redirect(url_for('routes.auth', error="Session invalid, please log in again"))
 
     try:
@@ -513,7 +510,6 @@ def chat(contact_id=None):
             unread_counts[contact.contact_user_id] = count
 
         if contact_id is None:
-            logger.info(f"Loaded contacts for user_id={user_id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
             return render_template('chat.html', user=user, contacts=contacts, message=message, active_contact=None, unread_counts=unread_counts)
 
         contact = User.query.get(contact_id)
@@ -542,7 +538,6 @@ def chat(contact_id=None):
                 reverse_session.triple_des_key = encrypted_key_for_contact
                 db.session.commit()
                 logger.info(f"Key exchanged for session: session_id={db_session.id}, user_id={user_id}, contact_id={contact_id}")
-        logger.info(f"Loaded chat for user_id={user_id}, contact_id={contact_id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
         return render_template('chat.html', user=user, contacts=contacts, active_contact=contact, unread_counts=unread_counts)
 
     except Exception as e:
@@ -583,7 +578,7 @@ def get_messages(contact_id):
                 "id": msg.id,
                 "sender_id": msg.sender_id,
                 "sender_name": User.query.get(msg.sender_id).name,
-                "plaintext": plaintext if status == "ACK" else "Error: " + status,
+                "plaintext": plaintext if status == "ACK" else "Message Integrity Compromised!",
                 "created_at": msg.created_at.strftime('%Y-%m-%d %H:%M:%S')
             })
         return jsonify({"status": "success", "messages": decrypted_messages}), 200
@@ -610,7 +605,7 @@ def mark_as_read(contact_id):
         for msg in messages:
             msg.status = 'received'
         db.session.commit()
-        logger.info(f"Marked messages as read for user_id={user_id}, contact_id={contact_id} at {datetime.now(vn_timezone).strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Marked messages as read for user_id={user_id}, contact_id={contact_id}")
         return jsonify({"status": "success", "message": "Messages marked as read"}), 200
     except Exception as e:
         db.session.rollback()
@@ -631,8 +626,7 @@ def get_unread_counts():
                 receiver_id=user_id,
                 status='sent'
             ).count()
-            unread_counts[str(contact.contact_user_id)] = count  # Chuyển contact_id thành string để đồng bộ với client
-        logger.info(f"Retrieved unread counts for user_id={user_id}: {unread_counts}")
+            unread_counts[str(contact.contact_user_id)] = count
         return jsonify({"status": "success", "unread_counts": unread_counts}), 200
     except Exception as e:
         logger.error(f"Failed to get unread counts: user_id={user_id}, error={str(e)}")

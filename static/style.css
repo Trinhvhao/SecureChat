@@ -267,7 +267,10 @@ body {
     display: flex;
     gap: 16px;
 }
-
+.sidebar-actions button{
+    border: none;
+    background:white;
+}
 .sidebar-actions i {
     color: var(--text-muted);
     cursor: pointer;
