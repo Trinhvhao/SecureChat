@@ -110,7 +110,6 @@ def decrypt_3des_key(encrypted_key, rsa_private_key_pem):
             logger.error(f"Decrypted TripleDES key has invalid length: {len(decrypted_key)} bytes")
             raise ValueError(f"Decrypted TripleDES key must be 24 bytes, got {len(decrypted_key)}")
 
-        logger.info("Successfully decrypted TripleDES key")
         return decrypted_key
     except ValueError as ve:
         logger.error(f"Failed to decrypt TripleDES key: {str(ve)}")

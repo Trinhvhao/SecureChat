@@ -123,7 +123,10 @@ def login():
         if user and check_password_hash(user.password_hash, password):
             session['user_id'] = user.id
             session['session_start'] = datetime.now(vn_timezone)
+            session['last_activity'] = datetime.now(vn_timezone)  # Thêm timestamp hoạt động
             session.permanent = True
+            user.is_online = True  # Cập nhật trạng thái online khi đăng nhập
+            db.session.commit()
             logger.info(f"User logged in successfully: {gmail}, user_id={user.id}")
             return jsonify({
                 "status": "success",
@@ -164,12 +167,14 @@ def register():
             password_hash=generate_password_hash(password),
             rsa_public_key=public_key,
             rsa_private_key=private_key,
-            created_at=datetime.now(vn_timezone)
+            created_at=datetime.now(vn_timezone),
+            is_online=False  # Mặc định offline khi đăng ký
         )
         db.session.add(user)
         db.session.commit()
         session['user_id'] = user.id
         session['session_start'] = datetime.now(vn_timezone)
+        session['last_activity'] = datetime.now(vn_timezone)  # Thêm timestamp hoạt động
         session.permanent = True
         logger.info(f"User registered successfully: {gmail}, user_id={user.id}")
         return jsonify({
@@ -185,6 +190,11 @@ def register():
 # Route đăng xuất
 @bp.route('/logout')
 def logout():
+    if 'user_id' in session:
+        user = User.query.get(session['user_id'])
+        if user:
+            user.is_online = False  # Cập nhật trạng thái offline khi logout
+            db.session.commit()
     session.clear()
     response = redirect(url_for('routes.auth'))
     response.delete_cookie(app.config['SESSION_COOKIE_NAME'])
@@ -472,6 +482,8 @@ def send_message():
         )
         db.session.add(msg)
         db.session.commit()
+        # Cập nhật hoạt động cuối cùng khi gửi tin nhắn
+        session['last_activity'] = datetime.now(vn_timezone)
         logger.info(f"Message sent successfully: message_id={msg.id}, user_id={user_id}, receiver_id={receiver_id}")
         return jsonify({
             "status": "success",
@@ -507,7 +519,23 @@ def chat(contact_id=None):
                 receiver_id=user_id,
                 status='sent'
             ).count()
-            unread_counts[contact.contact_user_id] = count
+            unread_counts[str(contact.contact_user_id)] = count
+
+        if request.headers.get('Accept') == 'application/json':
+            # Trả về JSON nếu là request API
+            contact_list = [{
+                "contact_user_id": contact.contact_user_id,
+                "user": {
+                    "name": contact.user.name or 'Unknown Contact',
+                    "is_online": contact.user.is_online
+                }
+            } for contact in contacts]
+            logger.info(f"Returned contacts as JSON for user_id={user_id}: {len(contact_list)} contacts")
+            return jsonify({
+                "status": "success",
+                "contacts": contact_list,
+                "unread_counts": unread_counts
+            }), 200
 
         if contact_id is None:
             return render_template('chat.html', user=user, contacts=contacts, message=message, active_contact=None, unread_counts=unread_counts)
@@ -538,6 +566,8 @@ def chat(contact_id=None):
                 reverse_session.triple_des_key = encrypted_key_for_contact
                 db.session.commit()
                 logger.info(f"Key exchanged for session: session_id={db_session.id}, user_id={user_id}, contact_id={contact_id}")
+        # Cập nhật hoạt động cuối cùng khi truy cập chat
+        session['last_activity'] = datetime.now(vn_timezone)
         return render_template('chat.html', user=user, contacts=contacts, active_contact=contact, unread_counts=unread_counts)
 
     except Exception as e:
@@ -581,6 +611,8 @@ def get_messages(contact_id):
                 "plaintext": plaintext if status == "ACK" else "Message Integrity Compromised!",
                 "created_at": msg.created_at.strftime('%Y-%m-%d %H:%M:%S')
             })
+        # Cập nhật hoạt động cuối cùng khi lấy tin nhắn
+        session['last_activity'] = datetime.now(vn_timezone)
         return jsonify({"status": "success", "messages": decrypted_messages}), 200
     except Exception as e:
         logger.error(f"Failed to retrieve messages: user_id={user_id}, contact_id={contact_id}, error={str(e)}")
@@ -606,6 +638,8 @@ def mark_as_read(contact_id):
             msg.status = 'received'
         db.session.commit()
         logger.info(f"Marked messages as read for user_id={user_id}, contact_id={contact_id}")
+        # Cập nhật hoạt động cuối cùng khi đánh dấu đọc
+        session['last_activity'] = datetime.now(vn_timezone)
         return jsonify({"status": "success", "message": "Messages marked as read"}), 200
     except Exception as e:
         db.session.rollback()
@@ -627,7 +661,59 @@ def get_unread_counts():
                 status='sent'
             ).count()
             unread_counts[str(contact.contact_user_id)] = count
+        # Cập nhật hoạt động cuối cùng khi lấy số tin nhắn chưa đọc
+        session['last_activity'] = datetime.now(vn_timezone)
         return jsonify({"status": "success", "unread_counts": unread_counts}), 200
     except Exception as e:
         logger.error(f"Failed to get unread counts: user_id={user_id}, error={str(e)}")
         return jsonify({"status": "error", "message": f"Failed to get unread counts: {str(e)}"}), 500
+
+# Thêm vào file routes.py, sau các import và trước các route hiện tại
+from utils import handshake_initiate
+
+@bp.route('/get_handshake_signal', methods=['GET'])
+@login_required
+def get_handshake_signal():
+    try:
+        signal = handshake_initiate()
+        logger.info(f"Handshake signal generated for user_id={session['user_id']}")
+        return jsonify({"status": "success", "signal": signal}), 200
+    except Exception as e:
+        logger.error(f"Failed to generate handshake signal: {str(e)}")
+        return jsonify({"status": "error", "message": f"Failed to generate handshake signal: {str(e)}"}), 500
+
+# Middleware kiểm tra timeout hoạt động
+@app.before_request
+def check_user_activity():
+    if 'user_id' in session and 'last_activity' in session:
+        user = User.query.get(session['user_id'])
+        if user:
+            inactivity_period = datetime.now(vn_timezone) - session['last_activity']
+            if inactivity_period > timedelta(minutes=5):  # Timeout sau 5 phút không hoạt động
+                user.is_online = False
+                db.session.commit()
+                logger.info(f"User {user.id} set to offline due to inactivity")
+            else:
+                user.is_online = True  # Đặt lại trạng thái online nếu có hoạt động
+                db.session.commit()
+        session['last_activity'] = datetime.now(vn_timezone)  # Cập nhật timestamp hoạt động
+
+# Route lấy ngày bắt đầu chat
+# Route lấy ngày bắt đầu chat dựa trên created_at của Contact
+@bp.route('/get_chat_start_date/<int:contact_id>', methods=['GET'])
+@login_required
+def get_chat_start_date(contact_id):
+    user_id = session['user_id']
+    try:
+        # Lấy ngày tạo liên hệ từ bảng Contact
+        contact = Contact.query.filter_by(user_id=user_id, contact_user_id=contact_id).first()
+        if not contact:
+            logger.error(f"Contact not found: user_id={user_id}, contact_id={contact_id}")
+            return jsonify({"status": "error", "message": "Contact not found"}), 404
+
+        start_date = contact.created_at.strftime('%d/%m/%Y')
+        logger.info(f"Chat start date retrieved from Contact: user_id={user_id}, contact_id={contact_id}, start_date={start_date}")
+        return jsonify({"status": "success", "start_date": start_date}), 200
+    except Exception as e:
+        logger.error(f"Failed to get chat start date: user_id={user_id}, contact_id={contact_id}, error={str(e)}")
+        return jsonify({"status": "error", "message": f"Failed to get chat start date: {str(e)}"}), 500

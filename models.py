@@ -26,6 +26,7 @@ class User(BaseModel):
     password_hash = db.Column(db.String(128), nullable=False)
     rsa_public_key = db.Column(db.Text, nullable=False)
     rsa_private_key = db.Column(db.Text, nullable=False)
+    is_online = db.Column(db.Boolean, default=False)  # Thêm cột trạng thái online
 
 class Invitation(BaseModel):
     __tablename__ = 'invitations'

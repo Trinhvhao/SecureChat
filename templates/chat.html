@@ -7,431 +7,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script>
-        $(document).ready(function() {
-            const userId = {{ user.id if user else 0 }};
-            let contactId = {{ active_contact.id if active_contact else 0 }};
-            let contactName = "{{ active_contact.name | default('') }}";
-            let lastMessageId = 0;
-            let isUpdating = false;
-            let messageUpdateInterval;
-            let unreadMessages = {{ unread_counts | tojson | safe }};
-            let isChatActive = false; // Theo dõi trạng thái chat window có đang active không
-
-            // Hàm gửi lời mời
-            function sendInvitation() {
-                const receiverGmail = $('#inviteEmail').val().trim();
-                if (!receiverGmail) {
-                    $('#inviteMessage').removeClass('success').addClass('error').text('Vui lòng nhập email người nhận.');
-                    return;
-                }
-
-                $.ajax({
-                    url: '/send_invitation',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ receiver_gmail: receiverGmail }),
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            $('#inviteMessage').removeClass('error').addClass('success').text('Lời mời đã được gửi.');
-                            $('#inviteEmail').val(''); // Xóa input
-                            setTimeout(() => {
-                                $('#inviteMessage').text('');
-                                $('#inviteModal').hide(); // Đóng modal
-                            }, 2000);
-                        } else {
-                            $('#inviteMessage').removeClass('success').addClass('error').text(response.error || 'Lỗi khi gửi lời mời.');
-                        }
-                    },
-                    error: function(xhr) {
-                        const errorMsg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Lỗi khi gửi lời mời.';
-                        $('#inviteMessage').removeClass('success').addClass('error').text(errorMsg);
-                    }
-                });
-            }
-
-            // Mở modal khi click nút thêm người
-            $('#addContactButton').click(function() {
-                $('#inviteModal').show();
-            });
-
-            // Đóng modal khi click nút hủy
-            $('#cancelInviteButton').click(function() {
-                $('#inviteModal').hide();
-                $('#inviteEmail').val('');
-                $('#inviteMessage').text('');
-            });
-
-            // Gửi lời mời khi nhấn nút hoặc Enter
-            $('#inviteButton').click(sendInvitation);
-            $('#inviteEmail').keypress(function(e) {
-                if (e.which === 13) {
-                    sendInvitation();
-                    e.preventDefault();
-                }
-            });
-
-            // Hàm gửi tin nhắn
-            function sendMessage() {
-                const message = $('#messageInput').val().trim();
-                if (!message || !contactId) return;
-
-                const tempId = 'temp_' + Date.now();
-                const messageHtml = `
-                    <div class="message sent" id="${tempId}" style="animation: fadeIn 0.3s ease;">
-                        <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="Bạn">
-                        <div class="message-content">
-                            <p>${message}</p>
-                        </div>
-                    </div>
-                    <div class="message-date">Vừa xong</div>
-                `;
-                $('#chatMessages').append(messageHtml);
-                scrollToBottom();
-                $('#messageInput').val('');
-
-                $.ajax({
-                    url: '/send_message',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ receiver_id: contactId, message: message }),
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            if (response.message_id) {
-                                $(`#${tempId}`).attr('id', 'msg_' + response.message_id);
-                                lastMessageId = Math.max(lastMessageId, response.message_id);
-                            }
-                        } else {
-                            $(`#${tempId}`).addClass('error');
-                            $(`#${tempId} .message-content p`).text('Gửi thất bại: ' + (response.error || 'Lỗi không xác định'));
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        $(`#${tempId}`).addClass('error');
-                        $(`#${tempId} .message-content p`).text('Lỗi khi gửi: ' + error);
-                    }
-                });
-            }
-
-            // Hàm cuộn xuống cuối khung chat
-            function scrollToBottom() {
-                $('#chatMessages').scrollTop($('#chatMessages')[0].scrollHeight);
-            }
-
-            // Hàm cập nhật tin nhắn mới
-            function updateMessages() {
-                if (!contactId || isUpdating) return;
-                isUpdating = true;
-
-                $.ajax({
-                    url: '/get_messages/' + contactId + '?last_id=' + lastMessageId,
-                    type: 'GET',
-                    success: function(response) {
-                        if (response.status === 'success' && response.messages && response.messages.length > 0) {
-                            let hasNewMessages = false;
-
-                            response.messages.forEach(function(msg) {
-                                if (msg.id > lastMessageId) {
-                                    const isSent = msg.sender_id === userId;
-                                    const messageClass = isSent ? 'sent' : 'received';
-                                    const senderName = isSent ? 'Bạn' : (msg.sender_name || 'Không xác định');
-                                    const messageHtml = `
-                                        <div class="message ${messageClass}" id="msg_${msg.id}" style="animation: fadeIn 0.3s ease;">
-                                            <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="${senderName}">
-                                            <div class="message-content">
-                                                <p>${msg.plaintext || 'Tin nhắn không thể giải mã'}</p>
-                                            </div>
-                                        </div>
-                                        <div class="message-date">${formatMessageTime(msg.created_at) || 'Vừa xong'}</div>
-                                    `;
-                                    $('#chatMessages').append(messageHtml);
-                                    lastMessageId = Math.max(lastMessageId, msg.id || 0);
-                                    hasNewMessages = true;
-
-                                    // Nếu là tin nhắn nhận được từ contact hiện tại, đánh dấu là đã đọc
-                                    if (!isSent && msg.sender_id === contactId) {
-                                        markAsRead(contactId);
-                                    }
-                                }
-                            });
-
-                            if (hasNewMessages) {
-                                scrollToBottom();
-                            }
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Lỗi khi tải tin nhắn:', { status: status, error: error, response: xhr.responseJSON });
-                    },
-                    complete: function() {
-                        isUpdating = false;
-                    }
-                });
-            }
-
-            // Hàm lấy số tin nhắn chưa đọc cho tất cả liên hệ
-            function updateAllUnreadCounts() {
-                $.ajax({
-                    url: '/get_unread_counts',
-                    type: 'GET',
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            unreadMessages = response.unread_counts;
-                            updateUnreadCountsUI();
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Lỗi khi lấy số tin nhắn chưa đọc:', { status: status, error: error, response: xhr.responseJSON });
-                    }
-                });
-            }
-
-            // Cập nhật UI cho tất cả unread counts
-            function updateUnreadCountsUI() {
-                $('.chat-item').each(function() {
-                    const chatId = $(this).data('chat-id');
-                    const count = unreadMessages[chatId] || 0;
-                    updateUnreadCountUI(chatId, count);
-                });
-            }
-
-            // Cập nhật UI cho unread count của một chat cụ thể
-            function updateUnreadCountUI(chatId, count) {
-                const chatItem = $(`.chat-item[data-chat-id="${chatId}"]`);
-                const unreadBadge = chatItem.find('.unread-badge');
-                const isActive = chatItem.hasClass('active');
-
-                // Nếu là chat đang active, không hiển thị badge
-                if (isActive) {
-                    chatItem.find('.chat-info p').removeClass('unread');
-                    unreadBadge.remove();
-                    return;
-                }
-
-                if (count > 0) {
-                    chatItem.find('.chat-info p').addClass('unread');
-                    if (unreadBadge.length === 0) {
-                        chatItem.append(`<span class="unread-badge">${count}</span>`);
-                    } else {
-                        unreadBadge.text(count);
-                    }
-                } else {
-                    chatItem.find('.chat-info p').removeClass('unread');
-                    unreadBadge.remove();
-                }
-            }
-
-            // Đánh dấu đã đọc
-            function markAsRead(chatId) {
-                if (unreadMessages[chatId] > 0) {
-                    unreadMessages[chatId] = 0;
-                    updateUnreadCountUI(chatId, 0);
-
-                    $.ajax({
-                        url: '/mark_as_read/' + chatId,
-                        type: 'POST',
-                        success: function(response) {
-                            if (response.status === 'success') {
-                                console.log('Đã đánh dấu đọc tin nhắn:', chatId, response);
-                                updateAllUnreadCounts();
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            console.error('Lỗi khi đánh dấu đọc:', { status: status, error: error, response: xhr.responseJSON });
-                        }
-                    });
-                }
-            }
-
-            // Hàm định dạng thời gian tin nhắn
-            function formatMessageTime(timestamp) {
-                if (!timestamp) return '';
-
-                const date = new Date(timestamp);
-                const now = new Date();
-
-                if (date.toDateString() === now.toDateString()) {
-                    return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-                } else if (date.getFullYear() === now.getFullYear()) {
-                    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-                } else {
-                    return date.toLocaleDateString('vi-VN');
-                }
-            }
-
-            // Gửi tin nhắn khi nhấn nút hoặc Enter
-            $('#sendButton').click(sendMessage);
-            $('#messageInput').keypress(function(e) {
-                if (e.which === 13) {
-                    sendMessage();
-                    e.preventDefault();
-                }
-            });
-
-            // Xử lý khi nhập liệu
-            $('#messageInput').on('input', function() {
-                const isTyping = $(this).val().trim().length > 0;
-                $('.input-actions').toggleClass('typing', isTyping);
-            });
-
-            // Hàm hiển thị loading
-            function showLoading() {
-                $('#chatLoading').show();
-                $('#chatMessages').hide();
-            }
-
-            // Hàm hiển thị thông báo thành công
-            function showSuccess() {
-                $('#chatSuccess').show();
-                setTimeout(() => {
-                    $('#chatSuccess').hide();
-                    $('#chatMessages').show();
-                }, 2000); // Ẩn sau 2 giây
-            }
-
-            // Hàm ẩn loading
-            function hideLoading() {
-                $('#chatLoading').hide();
-            }
-
-            // Khởi tạo chat
-            function initializeChat() {
-                if (contactId) {
-                    isChatActive = true;
-                    $('#chatHeader').text(contactName || 'Unknown Contact');
-                    $('#profile-section-name').text(contactName || 'Unknown Contact');
-
-                    // Xóa danh sách tin nhắn cũ
-                    $('#chatMessages').empty();
-                    lastMessageId = 0;
-
-                    // Gọi updateMessages để tải tin nhắn
-                    updateMessages();
-                    if (messageUpdateInterval) {
-                        clearInterval(messageUpdateInterval);
-                    }
-                    messageUpdateInterval = setInterval(updateMessages, 1000);
-                    $('#chat-window').addClass('active');
-
-                    // Đánh dấu đã đọc khi mở chat
-                    markAsRead(contactId);
-                } else {
-                    isChatActive = false;
-                    $('#chat-window').removeClass('active');
-                    $('#chatMessages').html(`
-                        <div class="no-chat-message">
-                            <i class="fas fa-comments"></i>
-                            <h2>Secure Chat</h2>
-                            <p>Vui lòng chọn một liên hệ để bắt đầu trò chuyện.</p>
-                        </div>
-                    `);
-                }
-
-                // Khởi tạo UI cho tin nhắn chưa đọc
-                updateUnreadCountsUI();
-            }
-
-            // Xử lý chọn liên hệ
-            $('.chat-item').click(function() {
-                const newContactId = $(this).data('chat-id');
-                if (newContactId === contactId) return;
-
-                contactId = newContactId;
-                contactName = $(this).find('h4').text() || 'Unknown Contact';
-
-                $('.chat-item').removeClass('active');
-                $(this).addClass('active');
-                $('#chatHeader').text(contactName);
-                $('#profile-section-name').text(contactName);
-                $('#chat-window').addClass('active');
-
-                lastMessageId = 0;
-                $('#chatMessages').empty();
-
-                // Hiển thị loading khi click
-                showLoading();
-
-                // Gọi handshake thực sự
-                $.ajax({
-                    url: '/get_handshake_signal',
-                    type: 'GET',
-                    success: function(response) {
-                        if (response.signal) {
-                            $.ajax({
-                                url: '/handshake',
-                                type: 'POST',
-                                contentType: 'application/json',
-                                data: JSON.stringify({
-                                    receiver_id: contactId,
-                                    signal: response.signal
-                                }),
-                                success: function(handshakeResponse) {
-                                    if (handshakeResponse.status === 'success') {
-                                        console.log('Handshake successful for contact:', contactId);
-                                        hideLoading();
-                                        showSuccess();
-                                        initializeChat();
-                                    } else {
-                                        console.error('Handshake failed:', handshakeResponse.error);
-                                        hideLoading();
-                                        alert('Không thể thiết lập kết nối bảo mật: ' + handshakeResponse.error);
-                                    }
-                                },
-                                error: function(xhr, status, error) {
-                                    console.error('Handshake error:', { status: status, error: error, response: xhr.responseJSON });
-                                    hideLoading();
-                                    alert('Lỗi khi thiết lập kết nối bảo mật');
-                                }
-                            });
-                        } else {
-                            console.error('No signal received from get_handshake_signal');
-                            hideLoading();
-                            alert('Lỗi khi lấy tín hiệu handshake');
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Failed to get handshake signal:', { status: status, error: error, response: xhr.responseJSON });
-                        hideLoading();
-                        alert('Lỗi khi lấy tín hiệu handshake');
-                    }
-                });
-            });
-
-            // Xử lý toggle dropdown hồ sơ
-            $('#profileDropdown').click(function(e) {
-                e.stopPropagation();
-                $(this).toggleClass('active');
-            });
-
-            // Đóng dropdown khi click ra ngoài
-            $(document).click(function() {
-                $('#profileDropdown').removeClass('active');
-            });
-
-            // Xử lý chuyển đổi chế độ tối
-            $('#themeToggle').click(function() {
-                $('body').toggleClass('dark-mode');
-                $(this).addClass('switching');
-                setTimeout(() => $(this).removeClass('switching'), 600);
-            });
-
-            // Cập nhật tin nhắn chưa đọc định kỳ
-            setInterval(updateAllUnreadCounts, 1000);
-
-            // Theo dõi khi người dùng rời khỏi tab
-            $(window).blur(function() {
-                isChatActive = false;
-            }).focus(function() {
-                if (contactId) {
-                    isChatActive = true;
-                    markAsRead(contactId);
-                }
-            });
-
-            // Khởi tạo chat ban đầu
-            initializeChat();
-        });
-    </script>
     <style>
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -452,6 +27,7 @@
             border-radius: 50%;
             object-fit: cover;
             flex-shrink: 0;
+            position: relative;
         }
 
         .chat-header-info img {
@@ -460,6 +36,7 @@
             border-radius: 50%;
             object-fit: cover;
             flex-shrink: 0;
+            position: relative;
         }
 
         .profile-section img {
@@ -483,6 +60,54 @@
             border-radius: 50%;
             object-fit: cover;
             margin-right: 10px;
+        }
+
+        /* CSS cho trạng thái online/offline */
+        .status-dot {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #ccc; /* Mặc định offline */
+            border: 2px solid #fff;
+            border-radius: 50%;
+            bottom: 2px;
+            right: 2px;
+        }
+
+        .status-dot.online {
+            background-color: #4CAF50; /* Online */
+        }
+
+        .chat-item .status-dot {
+            width: 16px;
+            left: 55px;
+            height: 16px;
+            transform: translate(-50%, -50%);
+            top: 60px;
+        }
+
+        .chat-header-info .status-dot {
+            top: 35px;
+            left: 35px;
+            transform: translate(-50%, -50%);
+        }
+
+        /* CSS cho dòng trạng thái dưới tên */
+        .chat-info .status-text,
+        .chat-header-info .status-text {
+            font-size: 12px;
+            color: #65676B;
+            margin-top: 2px;
+        }
+
+        .chat-info .status-text.online,
+        .chat-header-info .status-text.online {
+            color: #4CAF50;
+        }
+
+        .chat-info .status-text.offline,
+        .chat-header-info .status-text.offline {
+            color: #ccc;
         }
 
         /* CSS cho tin nhắn chưa đọc */
@@ -632,58 +257,275 @@
         /* CSS cho trạng thái loading */
         #chatLoading {
             display: none;
-            position: absolute;
+            position: fixed; /* Sửa thành fixed để luôn nằm giữa màn hình */
             top: 50%;
             left: 50%;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
             transform: translate(-50%, -50%);
             text-align: center;
-            z-index: 10;
+            z-index: 9999; /* Đảm bảo z-index cao nhất */
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Thêm lớp nền mờ */
         }
 
-        #chatLoading .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #1877F2;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
+        .ui-abstergo {
+            --primary: #fff;
+            --secondary: rgba(255, 255, 255, 0.3);
+            --shadow-blur: 3px;
+            --text-shadow-blur: 3px;
+            --animation-duration: 2s;
+            --size: 1.5; /* Tăng kích thước để nổi bật hơn */
         }
 
-        #chatLoading p {
-            color: #050505;
-            font-size: 16px;
-            margin: 0;
+        .abstergo-loader * {
+            -webkit-box-sizing: content-box;
+            box-sizing: content-box;
+        }
+
+        .ui-abstergo {
+            display: -webkit-box;
+            display: -ms-flexbox;
+            display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
+            flex-direction: column;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
+            align-items: center;
+            row-gap: 30px;
+            scale: var(--size);
+        }
+
+        .ui-abstergo .ui-text {
+            color: var(--primary);
+            text-shadow: 0 0 var(--text-shadow-blur) var(--secondary);
+            font-family: Menlo, sans-serif;
+            display: -webkit-box;
+            display: -ms-flexbox;
+            display: flex;
+            -webkit-box-align: baseline;
+            -ms-flex-align: baseline;
+            align-items: baseline;
+            -webkit-column-gap: 3px;
+            -moz-column-gap: 3px;
+            column-gap: 3px;
+            font-size: 18px; /* Tăng kích thước chữ */
+        }
+
+        .ui-abstergo .ui-dot {
+            content: "";
+            display: block;
+            width: 5px; /* Tăng kích thước chấm */
+            height: 5px;
+            -webkit-animation: dots var(--animation-duration) infinite linear;
+            animation: dots var(--animation-duration) infinite linear;
+            -webkit-animation-delay: .4s;
+            animation-delay: .4s;
+            background-color: var(--primary);
+        }
+
+        .ui-abstergo .ui-dot:nth-child(2) {
+            -webkit-animation-delay: .8s;
+            animation-delay: .8s;
+        }
+
+        .ui-abstergo .ui-dot:nth-child(3) {
+            -webkit-animation-delay: 1.2s;
+            animation-delay: 1.2s;
+        }
+
+        .ui-abstergo .ui-dot+.ui-dot {
+            margin-left: 5px; /* Tăng khoảng cách chấm */
+        }
+
+        .abstergo-loader {
+            width: 103px;
+            height: 90px;
+            position: relative;
+        }
+
+        .abstergo-loader div {
+            width: 50px;
+            border-right: 12px solid transparent;
+            border-left: 12px solid transparent;
+            border-top: 21px solid var(--primary);
+            position: absolute;
+            -webkit-filter: drop-shadow(0 0 var(--shadow-blur) var(--secondary));
+            filter: drop-shadow(0 0 var(--shadow-blur) var(--secondary));
+        }
+
+        .abstergo-loader div:nth-child(1) {
+            top: 27px;
+            left: 7px;
+            rotate: -60deg;
+            -webkit-animation: line1 var(--animation-duration) linear infinite alternate;
+            animation: line1 var(--animation-duration) linear infinite alternate;
+        }
+
+        .abstergo-loader div:nth-child(2) {
+            bottom: 2px;
+            left: 0;
+            rotate: 180deg;
+            -webkit-animation: line2 var(--animation-duration) linear infinite alternate;
+            animation: line2 var(--animation-duration) linear infinite alternate;
+        }
+
+        .abstergo-loader div:nth-child(3) {
+            bottom: 16px;
+            right: -9px;
+            rotate: 60deg;
+            -webkit-animation: line3 var(--animation-duration) linear infinite alternate;
+            animation: line3 var(--animation-duration) linear infinite alternate;
+        }
+
+        .abstergo-loader:hover div:nth-child(1) {
+            top: 21px;
+            left: 14px;
+            rotate: 60deg;
+        }
+
+        .abstergo-loader:hover div:nth-child(2) {
+            bottom: 5px;
+            left: -8px;
+            rotate: 300deg;
+        }
+
+        .abstergo-loader:hover div:nth-child(3) {
+            bottom: 7px;
+            right: -11px;
+            rotate: 180deg;
+        }
+
+        @-webkit-keyframes line1 {
+            0%, 40% {
+                top: 27px;
+                left: 7px;
+                rotate: -60deg;
+            }
+            60%, 100% {
+                top: 22px;
+                left: 14px;
+                rotate: 60deg;
+            }
+        }
+
+        @keyframes line1 {
+            0%, 40% {
+                top: 27px;
+                left: 7px;
+                rotate: -60deg;
+            }
+            60%, 100% {
+                top: 22px;
+                left: 14px;
+                rotate: 60deg;
+            }
+        }
+
+        @-webkit-keyframes line2 {
+            0%, 40% {
+                bottom: 2px;
+                left: 0;
+                rotate: 180deg;
+            }
+            60%, 100% {
+                bottom: 5px;
+                left: -8px;
+                rotate: 300deg;
+            }
+        }
+
+        @keyframes line2 {
+            0%, 40% {
+                bottom: 2px;
+                left: 0;
+                rotate: 180deg;
+            }
+            60%, 100% {
+                bottom: 5px;
+                left: -8px;
+                rotate: 300deg;
+            }
+        }
+
+        @-webkit-keyframes line3 {
+            0%, 40% {
+                bottom: 16px;
+                right: -9px;
+                rotate: 60deg;
+            }
+            60%, 100% {
+                bottom: 7px;
+                right: -11px;
+                rotate: 180deg;
+            }
+        }
+
+        @keyframes line3 {
+            0%, 40% {
+                bottom: 16px;
+                right: -9px;
+                rotate: 60deg;
+            }
+            60%, 100% {
+                bottom: 7px;
+                right: -11px;
+                rotate: 180deg;
+            }
+        }
+
+        @-webkit-keyframes dots {
+            0% {
+                background-color: var(--secondary);
+            }
+            30% {
+                background-color: var(--primary);
+            }
+            70%, 100% {
+                background-color: var(--secondary);
+            }
+        }
+
+        @keyframes dots {
+            0% {
+                background-color: var(--secondary);
+            }
+            30% {
+                background-color: var(--primary);
+            }
+            70%, 100% {
+                background-color: var(--secondary);
+            }
         }
 
         /* CSS cho thông báo thành công */
         #chatSuccess {
             display: none;
-            position: absolute;
+            position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             text-align: center;
-            z-index: 10;
-            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 9998; /* Cao hơn các phần tử khác nhưng thấp hơn loading */
+            background-color: #e0ffed;
             color: white;
             padding: 20px;
             border-radius: 10px;
         }
 
         #chatSuccess .success-icon {
-            font-size: 40px;
-            color: #28a745;
+            width: 130px;
+
         }
 
         #chatSuccess p {
             margin: 10px 0 0;
             font-size: 16px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            color: black;
         }
 
         /* Dark mode */
@@ -739,13 +581,12 @@
             color: #f8d7da;
         }
 
-        .dark-mode #chatLoading p {
+        .dark-mode #chatLoading .ui-text {
             color: #e4e6eb;
         }
 
-        .dark-mode #chatLoading .spinner {
-            border-color: #3a3b3c;
-            border-top-color: #1667d1;
+        .dark-mode .abstergo-loader div {
+            border-top-color: #e4e6eb;
         }
 
         .dark-mode #chatSuccess {
@@ -756,7 +597,622 @@
         .dark-mode #chatSuccess .success-icon {
             color: #28a745;
         }
+
+        .dark-mode .status-dot {
+            border-color: #242526;
+        }
+
+        .dark-mode .status-dot.online {
+            background-color: #4CAF50;
+        }
+
+        .dark-mode .chat-info .status-text,
+        .dark-mode .chat-header-info .status-text {
+            color: #b0b3b8;
+        }
+
+        .dark-mode .chat-info .status-text.online,
+        .dark-mode .chat-header-info .status-text.online {
+            color: #4CAF50;
+        }
+
+        .dark-mode .chat-info .status-text.offline,
+        .dark-mode .chat-header-info .status-text.offline {
+            color: #666;
+        }
     </style>
+  <script>
+$(document).ready(function() {
+    console.log('jQuery đã tải:', !!window.jQuery);
+    console.log('Danh sách liên hệ:', $('.chat-item').length);
+    const userId = {{ user.id if user else 0 }};
+    let contactId = {{ active_contact.id if active_contact else 0 }};
+    let contactName = "{{ active_contact.name | default('') }}";
+    let lastMessageId = 0;
+    let isUpdating = false;
+    let messageUpdateInterval;
+    let unreadMessages = {{ unread_counts | tojson | safe }};
+    let isChatActive = false;
+    let messageCache = {};
+    let loadingDone = false;
+
+    // Hàm gửi lời mời
+    function sendInvitation() {
+    const receiverGmail = $('#inviteEmail').val().trim();
+    if (!receiverGmail) {
+        $('#inviteMessage').removeClass('success').addClass('error').text('Vui lòng nhập email người nhận.');
+        return;
+    }
+
+    $.ajax({
+        url: '/send_invitation',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ receiver_gmail: receiverGmail }),
+        success: function(response) {
+            if (response.status === 'success') {
+                $('#inviteMessage').removeClass('error').addClass('success').text('Lời mời đã được gửi.');
+                $('#inviteEmail').val('');
+                setTimeout(() => {
+                    $('#inviteMessage').text('');
+                    $('#inviteModal').hide();
+                    updateContacts(); // Cập nhật danh sách liên hệ
+                }, 2000);
+            } else {
+                $('#inviteMessage').removeClass('success').addClass('error').text(response.error || 'Lỗi khi gửi lời mời.');
+            }
+        },
+        error: function(xhr) {
+            const errorMsg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Lỗi khi gửi lời mời.';
+            $('#inviteMessage').removeClass('success').addClass('error').text(errorMsg);
+        }
+    });
+}
+
+    // Hàm xử lý modal
+    $('#addContactButton').click(function() {
+        $('#inviteModal').show();
+    });
+
+    $('#cancelInviteButton').click(function() {
+        $('#inviteModal').hide();
+        $('#inviteEmail').val('');
+        $('#inviteMessage').text('');
+    });
+
+    $('#inviteButton').click(sendInvitation);
+    $('#inviteEmail').keypress(function(e) {
+        if (e.which === 13) {
+            sendInvitation();
+            e.preventDefault();
+        }
+    });
+
+    // Hàm gửi tin nhắn
+    function sendMessage() {
+        const message = $('#messageInput').val().trim();
+        if (!message || !contactId) return;
+
+        const tempId = 'temp_' + Date.now();
+        const messageHtml = `
+            <div class="message sent" id="${tempId}" style="animation: fadeIn 0.3s ease;">
+                <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="Bạn">
+                <div class="message-content">
+                    <p>${message}</p>
+                </div>
+            </div>
+            <div class="message-date">Vừa xong</div>
+        `;
+        $('#chatMessages').append(messageHtml);
+        scrollToBottom();
+        $('#messageInput').val('');
+
+        $.ajax({
+            url: '/send_message',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ receiver_id: contactId, message: message }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    if (response.message_id) {
+                        $(`#${tempId}`).attr('id', 'msg_' + response.message_id);
+                        lastMessageId = Math.max(lastMessageId, response.message_id);
+                    }
+                } else {
+                    $(`#${tempId}`).addClass('error');
+                    $(`#${tempId} .message-content p`).text('Gửi thất bại: ' + (response.error || 'Lỗi không xác định'));
+                }
+            },
+            error: function(xhr, status, error) {
+                $(`#${tempId}`).addClass('error');
+                $(`#${tempId} .message-content p`).text('Lỗi khi gửi: ' + error);
+            }
+        });
+    }
+
+    function scrollToBottom() {
+        $('#chatMessages').scrollTop($('#chatMessages')[0].scrollHeight);
+    }
+
+    function updateContacts() {
+    $.ajax({
+        url: '/chat',
+        type: 'GET',
+        headers: {
+            'Accept': 'application/json'
+        },
+        success: function(response) {
+            if (response.status === 'success' && response.contacts) {
+                const $chatList = $('.chat-list');
+                $chatList.empty(); // Xóa danh sách hiện tại
+
+                if (response.contacts.length === 0) {
+                    $chatList.append(`
+                        <div class="chat-history-notice">
+                            Thiếu lịch sử trò chuyện. <a href="#">Khôi phục ngay</a>
+                        </div>
+                    `);
+                } else {
+                    response.contacts.forEach(contact => {
+                        const isActive = contact.contact_user_id === contactId;
+                        const unreadCount = response.unread_counts[contact.contact_user_id] || 0;
+                        const $chatItem = $(`
+                            <div class="chat-item ${isActive ? 'active' : ''}" data-chat-id="${contact.contact_user_id}">
+                                <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="${contact.user.name || 'Unknown Contact'}">
+                                <span class="status-dot ${contact.user.is_online ? 'online' : ''}"></span>
+                                <div class="chat-info">
+                                    <h4>${contact.user.name || 'Unknown Contact'}</h4>
+                                    <p class="status-text ${contact.user.is_online ? 'online' : 'offline'}">
+                                        ${contact.user.is_online ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                                    </p>
+                                    <p>Tin nhắn và cuộc gọi được bảo mật bằng mã hóa đầu cuối...</p>
+                                </div>
+                                ${unreadCount > 0 ? `<span class="unread-badge">${unreadCount}</span>` : ''}
+                            </div>
+                        `);
+                        $chatList.append($chatItem);
+                    });
+                }
+                console.log('Đã cập nhật danh sách liên hệ:', response.contacts.length);
+            } else {
+                console.error('Lỗi khi lấy danh sách liên hệ:', response.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Lỗi khi gọi API /chat:', { status: status, error: error, response: xhr.responseJSON });
+        }
+    });
+}
+
+    function updateMessages() {
+        if (!contactId || isUpdating) return;
+        isUpdating = true;
+
+        $.ajax({
+            url: '/get_messages/' + contactId + '?last_id=' + lastMessageId,
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success' && response.messages && response.messages.length > 0) {
+                    let hasNewMessages = false;
+
+                    response.messages.forEach(function(msg) {
+                        if (msg.id > lastMessageId) {
+                            const isSent = msg.sender_id === userId;
+                            const messageClass = isSent ? 'sent' : 'received';
+                            const senderName = isSent ? 'Bạn' : (msg.sender_name || 'Không xác định');
+                            const messageHtml = `
+                                <div class="message ${messageClass}" id="msg_${msg.id}" style="animation: fadeIn 0.3s ease;">
+                                    <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="${senderName}">
+                                    <div class="message-content">
+                                        <p>${msg.plaintext || 'Tin nhắn không thể giải mã'}</p>
+                                    </div>
+                                </div>
+                                <div class="message-date">${formatMessageTime(msg.created_at) || 'Vừa xong'}</div>
+                            `;
+                            $('#chatMessages').append(messageHtml);
+                            lastMessageId = Math.max(lastMessageId, msg.id || 0);
+                            hasNewMessages = true;
+
+                            if (!isSent && msg.sender_id === contactId) {
+                                markAsRead(contactId);
+                            }
+                        }
+                    });
+
+                    if (hasNewMessages) {
+                        scrollToBottom();
+                    }
+                }
+                // Xóa .no-chat-message sau khi cập nhật tin nhắn
+                $('.no-chat-message').remove();
+                console.log('Kiểm tra sau updateMessages: Số lượng .no-chat-message:', $('.no-chat-message').length);
+            },
+            error: function(xhr, status, error) {
+                console.error('Lỗi khi tải tin nhắn:', { status: status, error: error, response: xhr.responseJSON });
+            },
+            complete: function() {
+                isUpdating = false;
+            }
+        });
+    }
+
+    function updateAllUnreadCounts() {
+        $.ajax({
+            url: '/get_unread_counts',
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    unreadMessages = response.unread_counts;
+                    updateUnreadCountsUI();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Lỗi khi lấy số tin nhắn chưa đọc:', { status: status, error: error, response: xhr.responseJSON });
+            }
+        });
+    }
+
+    function updateUnreadCountsUI() {
+        $('.chat-item').each(function() {
+            const chatId = $(this).data('chat-id');
+            const count = unreadMessages[chatId] || 0;
+            updateUnreadCountUI(chatId, count);
+        });
+    }
+
+    function updateUnreadCountUI(chatId, count) {
+        const chatItem = $(`.chat-item[data-chat-id="${chatId}"]`);
+        const unreadBadge = chatItem.find('.unread-badge');
+        const isActive = chatItem.hasClass('active');
+
+        if (isActive) {
+            chatItem.find('.chat-info p').removeClass('unread');
+            unreadBadge.remove();
+            return;
+        }
+
+        if (count > 0) {
+            chatItem.find('.chat-info p').addClass('unread');
+            if (unreadBadge.length === 0) {
+                chatItem.append(`<span class="unread-badge">${count}</span>`);
+            } else {
+                unreadBadge.text(count);
+            }
+        } else {
+            chatItem.find('.chat-info p').removeClass('unread');
+            unreadBadge.remove();
+        }
+    }
+
+    function markAsRead(chatId) {
+        if (unreadMessages[chatId] > 0) {
+            unreadMessages[chatId] = 0;
+            updateUnreadCountUI(chatId, 0);
+
+            $.ajax({
+                url: '/mark_as_read/' + chatId,
+                type: 'POST',
+                success: function(response) {
+                    if (response.status === 'success') {
+                        console.log('Đã đánh dấu đọc tin nhắn:', chatId, response);
+                        updateAllUnreadCounts();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Lỗi khi đánh dấu đọc:', { status: status, error: error, response: xhr.responseJSON });
+                }
+            });
+        }
+    }
+
+    function formatMessageTime(timestamp) {
+        if (!timestamp) return '';
+
+        const date = new Date(timestamp);
+        const now = new Date();
+
+        if (date.toDateString() === now.toDateString()) {
+            return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        } else if (date.getFullYear() === now.getFullYear()) {
+            return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+        } else {
+            return date.toLocaleDateString('vi-VN');
+        }
+    }
+
+    // Xử lý gửi tin nhắn
+    $('#sendButton').click(sendMessage);
+    $('#messageInput').keypress(function(e) {
+        if (e.which === 13) {
+            sendMessage();
+            e.preventDefault();
+        }
+    });
+
+    $('#messageInput').on('input', function() {
+        const isTyping = $(this).val().trim().length > 0;
+        $('.input-actions').toggleClass('typing', isTyping);
+    });
+
+    // Hàm hiển thị và ẩn loading/success
+    function showLoading() {
+        console.log('Đang hiển thị loading...');
+        loadingDone = false;
+        $('#chatLoading').css('display', 'flex');
+        $('#chatMessages').css('display', 'none');
+        $('#chatSuccess').css('display', 'none');
+        console.log('Trạng thái #chatLoading:', $('#chatLoading').css('display'));
+        console.log('Trạng thái #chatMessages:', $('#chatMessages').css('display'));
+        console.log('Trạng thái #chatSuccess:', $('#chatSuccess').css('display'));
+
+        // Đảm bảo loading hiển thị ít nhất 1.5 giây
+        window.loadingTimeout = setTimeout(() => {
+            loadingDone = true;
+        }, 1500);
+    }
+
+    function hideLoadingAndShowSuccess() {
+        const tryHide = () => {
+            if (loadingDone) {
+                console.log('Ẩn loading, hiển thị success...');
+                $('#chatLoading').css('display', 'none');
+                $('#chatSuccess').css('display', 'block');
+                console.log('Trạng thái #chatLoading sau khi ẩn:', $('#chatLoading').css('display'));
+                console.log('Trạng thái #chatSuccess:', $('#chatSuccess').css('display'));
+
+                setTimeout(() => {
+                    $('#chatSuccess').css('display', 'none');
+                    $('.no-chat-message').remove(); // Xóa triệt để no-chat-message
+                    $('#chatMessages').css('display', 'block');
+                    console.log('Trạng thái .no-chat-message sau khi xóa:', $('.no-chat-message').length);
+                    console.log('Trạng thái #chatMessages sau khi hiển thị:', $('#chatMessages').css('display'));
+                    initializeChat();
+                }, 2000); // Hiển thị success trong 2 giây
+            } else {
+                setTimeout(tryHide, 100);
+            }
+        };
+        tryHide();
+    }
+
+    function showSearchForm() {
+    $('#searchForm').show();
+    $('#searchKeyword').focus();
+}
+
+function searchAndHighlight() {
+    const keyword = $('#searchKeyword').val().toLowerCase().trim();
+    if (!keyword || !contactId) {
+        alert('Vui lòng nhập từ khóa và chọn một cuộc trò chuyện!');
+        return;
+    }
+
+    $('#chatMessages .message').removeClass('highlight');
+    let found = false;
+
+    $('#chatMessages .message').each(function() {
+        const messageText = $(this).find('.message-content p').text().toLowerCase();
+        if (messageText.includes(keyword)) {
+            $(this).addClass('highlight');
+            const $chatMessages = $('#chatMessages');
+            $chatMessages.animate({
+                scrollTop: $(this).position().top + $chatMessages.scrollTop() - 150  // Điều chỉnh -50 để căn giữa
+            }, 500);
+            found = true;
+            return false; // Dừng khi tìm thấy tin nhắn đầu tiên
+        }
+    });
+
+    if (!found) {
+        alert('Không tìm thấy tin nhắn chứa từ khóa "' + keyword + '"!');
+    }
+
+    $('#searchForm').hide();
+}
+$('#searchChatButton').click(showSearchForm);
+$('#searchSubmitButton').click(searchAndHighlight);
+$('#searchKeyword').keypress(function(e) {
+    if (e.which === 13) {
+        searchAndHighlight();
+        e.preventDefault();
+    }
+});
+    // Khởi tạo cuộc trò chuyện
+   function initializeChat() {
+    $('#chatHeader').text(contactName || 'Liên hệ không xác định');
+    $('#profile-section-name').text(contactName || 'Liên hệ không xác định');
+
+    // Xóa no-chat-message trước khi xử lý
+    $('.no-chat-message').remove();
+    console.log('Đã xóa .no-chat-message trong initializeChat, số lượng còn lại:', $('.no-chat-message').length);
+
+    if (contactId) {
+        isChatActive = true;
+
+        // Lấy ngày bắt đầu chat từ API
+        $.ajax({
+            url: '/get_chat_start_date/' + contactId,
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    const startDate = response.start_date;
+                    // Thêm ngày bắt đầu vào đầu #chatMessages nếu chưa có
+                    if (!$('#chatMessages .chat-start-date').length) {
+                        $('#chatMessages').prepend(`
+                            <div class="chat-start-date" style="text-align: center; padding: 10px; color: #65676B; font-size: 14px;">
+                                Cuộc trò chuyện bắt đầu: ${startDate}
+                            </div>
+                        `);
+                    }
+                } else {
+                    console.error('Lỗi khi lấy ngày bắt đầu chat:', response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Lỗi khi gọi API get_chat_start_date:', { status: status, error: error, response: xhr.responseJSON });
+                // Fallback: thêm ngày hiện tại nếu API lỗi
+                const defaultDate = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                if (!$('#chatMessages .chat-start-date').length) {
+                    $('#chatMessages').prepend(`
+                        <div class="chat-start-date" style="text-align: center; padding: 10px; color: #65676B; font-size: 14px;">
+                            Cuộc trò chuyện bắt đầu: ${defaultDate}
+                        </div>
+                    `);
+                }
+            }
+        });
+
+        // Xử lý messageCache và cập nhật tin nhắn
+        if (messageCache[contactId]) {
+            const $tempDiv = $('<div>').html(messageCache[contactId]);
+            $tempDiv.find('.no-chat-message').remove();
+            messageCache[contactId] = $tempDiv.html();
+            console.log('Đã làm sạch .no-chat-message trong messageCache[contactId]');
+        }
+
+        if (!messageCache[contactId]) {
+            $('#chatMessages').empty();
+            lastMessageId = 0;
+            updateMessages();
+        } else {
+            $('#chatMessages').html(messageCache[contactId]);
+            lastMessageId = Object.keys(messageCache[contactId].match(/msg_\d+/g) || []).reduce(
+                (max, id) => Math.max(max, parseInt(id.replace('msg_', '')) || 0),
+                0
+            );
+            updateMessages();
+        }
+
+        if (messageUpdateInterval) clearInterval(messageUpdateInterval);
+        messageUpdateInterval = setInterval(updateMessages, 1000);
+        $('#chat-window').addClass('active');
+        markAsRead(contactId);
+    } else {
+        isChatActive = false;
+        $('#chat-window').removeClass('active');
+
+        // Chỉ thêm no-chat-message nếu không có tin nhắn và không trong trạng thái loading/success
+        if (!$('#chatSuccess').is(':visible') && !$('#chatLoading').is(':visible') && $('#chatMessages').find('.message').length === 0) {
+            $('#chatMessages').html(`
+                <div class="no-chat-message">
+                    <i class="fas fa-comments"></i>
+                    <h2>Secure Chat</h2>
+                    <p>Vui lòng chọn một liên hệ để bắt đầu trò chuyện.</p>
+                </div>
+            `);
+            console.log('Đã thêm .no-chat-message vì không có contactId và không có tin nhắn');
+        }
+    }
+
+    console.log('Kiểm tra sau initializeChat: Số lượng .no-chat-message:', $('.no-chat-message').length);
+    console.log('Kiểm tra sau initializeChat: Số lượng .message:', $('#chatMessages').find('.message').length);
+}
+
+    // Xử lý chọn liên hệ
+    $(document).on('click', '.chat-item', function() {
+        console.log('Đã click liên hệ:', $(this).data('chat-id'));
+        const newContactId = $(this).data('chat-id');
+        if (newContactId === contactId) return;
+
+        contactId = newContactId;
+        contactName = $(this).find('h4').text() || 'Liên hệ không xác định';
+
+        $('.chat-item').removeClass('active');
+        $(this).addClass('active');
+        $('#chatHeader').text(contactName);
+        $('#profile-section-name').text(contactName);
+        $('#chat-window').addClass('active');
+
+        // Lưu messageCache nhưng loại bỏ .no-chat-message
+        if (contactId) {
+            const $tempDiv = $('<div>').html($('#chatMessages').html());
+            $tempDiv.find('.no-chat-message').remove();
+            messageCache[contactId] = $tempDiv.html();
+            console.log('Đã lưu messageCache[contactId] không chứa .no-chat-message');
+        }
+
+        lastMessageId = 0;
+        showLoading();
+
+        $.ajax({
+            url: '/get_handshake_signal',
+            type: 'GET',
+            success: function(response) {
+                console.log('Phản hồi tín hiệu handshake:', response);
+                if (response.status === 'success' && response.signal) {
+                    $.ajax({
+                        url: '/handshake',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            receiver_id: contactId,
+                            signal: response.signal
+                        }),
+                        success: function(handshakeResponse) {
+                            console.log('Phản hồi handshake:', handshakeResponse);
+                            if (handshakeResponse.status === 'success') {
+                                console.log('Handshake thành công cho liên hệ:', contactId);
+                                hideLoadingAndShowSuccess();
+                            } else {
+                                console.error('Handshake thất bại:', handshakeResponse.error);
+                                $('#chatLoading').css('display', 'none');
+                                alert('Không thể thiết lập kết nối bảo mật: ' + handshakeResponse.error);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Lỗi handshake:', { status: status, error: error, response: xhr.responseJSON });
+                            $('#chatLoading').css('display', 'none');
+                            alert('Lỗi khi thiết lập kết nối bảo mật: ' + error);
+                        }
+                    });
+                } else {
+                    console.error('Không nhận được tín hiệu từ get_handshake_signal:', response);
+                    $('#chatLoading').css('display', 'none');
+                    alert('Lỗi khi lấy tín hiệu handshake: ' + (response.message || 'Không có tín hiệu'));
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Lỗi khi lấy tín hiệu handshake:', { status: status, error: error, response: xhr.responseJSON });
+                $('#chatLoading').css('display', 'none');
+                alert('Lỗi khi lấy tín hiệu handshake: ' + error);
+            }
+        });
+    });
+
+    // Dropdown hồ sơ
+    $('#profileDropdown').click(function(e) {
+        e.stopPropagation();
+        $(this).toggleClass('active');
+    });
+
+    $(document).click(function() {
+        $('#profileDropdown').removeClass('active');
+    });
+
+    // Chuyển đổi giao diện sáng/tối
+    $('#themeToggle').click(function() {
+        $('body').toggleClass('dark-mode');
+        $(this).addClass('switching');
+        setTimeout(() => $(this).removeClass('switching'), 600);
+    });
+
+    // Cập nhật số tin nhắn chưa đọc định kỳ
+    setInterval(updateAllUnreadCounts, 1000);
+
+    // Xử lý sự kiện focus/blur cửa sổ
+    $(window).blur(function() {
+        isChatActive = false;
+    }).focus(function() {
+        if (contactId) {
+            isChatActive = true;
+            markAsRead(contactId);
+        }
+    });
+
+    // Khởi tạo cuộc trò chuyện khi tải trang
+    initializeChat();
+});
+  </script>
 </head>
 <body>
     <!-- Navbar -->
@@ -766,8 +1222,7 @@
                 <img src="{{ url_for('static', filename='img/encrypted.png') }}" alt="Logo">
             </div>
             <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="text" placeholder="Tìm kiếm trên SecureChat">
+              <h2 style="color: #2e89ff">Secure Chat</h2>
             </div>
         </div>
         <div class="nav-center">
@@ -800,7 +1255,7 @@
             <div class="nav-profile" id="profileDropdown">
                 <div class="profile-wrapper">
                     <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ user.name | default('User') }}">
-                    <span class="status-dot"></span>
+                    <span class="status-dot {% if user.is_online %}online{% endif %}"></span>
                     <div class="arrow-wrapper">
                         <i class="fas fa-chevron-down"></i>
                     </div>
@@ -850,8 +1305,12 @@
                     {% for contact in contacts %}
                         <div class="chat-item {% if active_contact and contact.contact_user_id == active_contact.id %}active{% endif %}" data-chat-id="{{ contact.contact_user_id }}">
                             <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ contact.user.name | default('Unknown Contact') }}">
+                            <span class="status-dot {% if contact.user.is_online %}online{% endif %}"></span>
                             <div class="chat-info">
                                 <h4>{{ contact.user.name | default('Unknown Contact') }}</h4>
+                                <p class="status-text {% if contact.user.is_online %}online{% else %}offline{% endif %}">
+                                    {% if contact.user.is_online %}Đang hoạt động{% else %}Ngoại tuyến{% endif %}
+                                </p>
                                 <p>Tin nhắn và cuộc gọi được bảo mật bằng mã hóa đầu cuối...</p>
                             </div>
                             {% if unread_counts.get(contact.contact_user_id, 0) > 0 %}
@@ -868,6 +1327,7 @@
             <div class="chat-header">
                 <div class="chat-header-info">
                     <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
+                    <span class="status-dot {% if active_contact and active_contact.is_online %}online{% endif %}"></span>
                     <h3 id="chatHeader">{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}</h3>
                 </div>
                 <div class="chat-header-actions">
@@ -884,16 +1344,27 @@
                     </div>
                 {% endif %}
             </div>
-            <!-- Thêm phần loading -->
+            <!-- Thêm phần loading với ui-abstergo -->
             <div id="chatLoading">
-                <div class="spinner"></div>
-                <p>Đang thiết lập kết nối bảo mật...</p>
+                <div class="ui-abstergo">
+                    <div class="abstergo-loader">
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                    </div>
+                    <div class="ui-text">
+                        Đang thực hiện bảo mật
+                        <div class="ui-dot"></div>
+                        <div class="ui-dot"></div>
+                        <div class="ui-dot"></div>
+                    </div>
+                </div>
             </div>
             <!-- Thêm phần thông báo thành công -->
-            <div id="chatSuccess">
-                <i class="fas fa-check success-icon"></i>
-                <p>Kết nối bảo mật đã thiết lập thành công!</p>
-            </div>
+           <div id="chatSuccess">
+    <img src="{{ url_for('static', filename='img/insurance.png') }}" alt="Success Icon" class="success-icon">
+    <p>Kết nối bảo mật đã thiết lập thành công!</p>
+</div>
             <div class="chat-input">
                 <div class="input-actions">
                     <i class="fas fa-plus-circle"></i>
@@ -913,55 +1384,60 @@
 
         <!-- Chat Info Panel -->
         <div class="chat-info-panel">
-            <div class="profile-section">
-                <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
-                <h3 id="profile-section-name">{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}</h3>
-                <div class="encryption-status">
-                    <i class="fas fa-lock"></i>
-                    <span>Mã hóa đầu cuối</span>
-                </div>
-                <div class="profile-actions">
-                    <button>
-                        <i class="fas fa-user-circle"></i>
-                        <span>Hồ sơ</span>
-                    </button>
-                    <button>
-                        <i class="fas fa-bell-slash"></i>
-                        <span>Tắt thông báo</span>
-                    </button>
-                    <button>
-                        <i class="fas fa-search"></i>
-                        <span>Tìm kiếm</span>
-                    </button>
-                </div>
-            </div>
-            <div class="info-sections">
-                <div class="info-section">
-                    <div class="section-header">
-                        <h4>Thông tin trò chuyện</h4>
-                        <i class="fas fa-chevron-down"></i>
-                    </div>
-                </div>
-                <div class="info-section">
-                    <div class="section-header">
-                        <h4>Tùy chỉnh trò chuyện</h4>
-                        <i class="fas fa-chevron-down"></i>
-                    </div>
-                </div>
-                <div class="info-section">
-                    <div class="section-header">
-                        <h4>Media & tệp</h4>
-                        <i class="fas fa-chevron-down"></i>
-                    </div>
-                </div>
-                <div class="info-section">
-                    <div class="section-header">
-                        <h4>Quyền riêng tư & hỗ trợ</h4>
-                        <i class="fas fa-chevron-down"></i>
-                    </div>
-                </div>
+    <div class="profile-section">
+        <img src="https://i.pinimg.com/736x/f9/8d/fc/f98dfca170a241800720cf5ccbbf21e7.jpg" alt="{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}">
+        <h3 id="profile-section-name">{{ active_contact.name | default('Chọn một cuộc trò chuyện') }}</h3>
+        <div class="encryption-status">
+            <i class="fas fa-lock"></i>
+            <span>Mã hóa đầu cuối</span>
+        </div>
+        <div class="profile-actions">
+            <button>
+                <i class="fas fa-user-circle"></i>
+                <span>Hồ sơ</span>
+            </button>
+            <button>
+                <i class="fas fa-bell-slash"></i>
+                <span>Tắt thông báo</span>
+            </button>
+            <button id="searchChatButton">
+                <i class="fas fa-search"></i>
+                <span>Tìm kiếm</span>
+            </button>
+        </div>
+        <!-- Di chuyển form tìm kiếm vào đây -->
+        <div id="searchForm" class="search-form" style="display: none;">
+            <input type="text" id="searchKeyword" placeholder="Nhập từ khóa để tìm..." style="width: 100%; padding: 10px; border-radius: 15px; border: 1px solid #ccc; margin-top: 10px;">
+            <button id="searchSubmitButton" style="margin-top: 10px; padding: 8px 16px; border: none; border-radius: 15px; background-color: #1877F2; color: white; cursor: pointer;">Tìm</button>
+        </div>
+    </div>
+    <div class="info-sections">
+        <div class="info-section">
+            <div class="section-header">
+                <h4>Thông tin trò chuyện</h4>
+                <i class="fas fa-chevron-down"></i>
             </div>
         </div>
+        <div class="info-section">
+            <div class="section-header">
+                <h4>Tùy chỉnh trò chuyện</h4>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="info-section">
+            <div class="section-header">
+                <h4>Media & tệp</h4>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="info-section">
+            <div class="section-header">
+                <h4>Quyền riêng tư & hỗ trợ</h4>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+    </div>
+</div>
     </div>
 
     <!-- Modal gửi lời mời -->
