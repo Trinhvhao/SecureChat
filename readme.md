@@ -334,7 +334,7 @@ SOFTWARE.
 
 ## 📬 Liên Hệ
 
-<div style="text-align: center">
+<div align="center">
 
 ### 👥 Nhóm Phát Triển
 
@@ -359,7 +359,7 @@ SOFTWARE.
 
 ---
 
-<div style="text-align: center">
+<div align="center">
   
 **⭐ Nếu project này hữu ích, hãy star để ủng hộ nhóm phát triển!**
 
