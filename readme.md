@@ -25,7 +25,7 @@
 
 <h3 align="center">🔐 Bảo Mật Liên Lạc Với Công Nghệ Mã Hóa Tiên Tiến</h3>
 
-<p style="text-align: center">
+<p align="center">
   <strong>Hệ thống nhắn tin an toàn sử dụng TripleDES và RSA cho học phần Nhập môn An toàn, Bảo mật Thông tin</strong>
 </p>
 
