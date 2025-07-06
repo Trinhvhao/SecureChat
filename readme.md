@@ -8,7 +8,7 @@
 </div>
 
 <div align="center">
-  <img src="static/img/Banner.jpeg" alt="Banner Ứng Dụng" width="800"/>
+  <img src="static/img/Banner.jpeg" alt="Banner Ứng Dụng" />
 </div>
 
 <div align="center">
@@ -104,7 +104,7 @@ Hệ thống hoạt động theo mô hình **P2P với mã hóa đầu cuối (E
 ### 📱 Giao Diện Thân Thiện
 
 <div align="center">
-  <img src="static/img/chat-interface.jpeg" alt="Giao diện Khung Chat" width="600"/>
+  <img src="static/img/chat-interface.jpeg" alt="Giao diện Khung Chat" />
 </div>
 
 - **💬 Chat Interface**: Khung chat hiện đại, dễ sử dụng
@@ -240,7 +240,7 @@ python app.py
 ### 📺 Demo
 
 <div align="center">
-  <img src="static/img/demo.gif" alt="Demo Ứng Dụng" width="800"/>
+  <img src="static/img/demo.gif" alt="Demo Ứng Dụng" />
 </div>
 
 *Nhấp vào hình ảnh để xem video demo đầy đủ*
