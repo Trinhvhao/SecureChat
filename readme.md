@@ -2,7 +2,7 @@
   <h1>🔒 Ứng Dụng Bảo Mật Tin Nhắn Văn Bản Với TripleDES và RSA</h1>
 </div>
 
-<div style="text-align: center">
+<div align="center">
   <img src="static/img/logo.png" alt="Logo Đại học Đại Nam" width="200"/>
   <img src="static/img/Logo_DNU.png" alt="Logo Khoa Công nghệ Thông tin" width="170"/>
 </div>
@@ -11,7 +11,7 @@
   <img src="static/img/Banner.jpeg" alt="Banner Ứng Dụng" width="800"/>
 </div>
 
-<div style="text-align: center">
+<div align="center">
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue?style=for-the-badge)](https://www.python.org)
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
