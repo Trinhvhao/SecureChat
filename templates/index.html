@@ -1,88 +1,819 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
+
 <head>
-    <meta charset="UTF-8">
-    <title>Secure Chat</title>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>SecureChat - Ứng dụng Chat Bảo Mật Triple DES & RSA</title>
+  <meta name="description" content="SecureChat - Ứng dụng bảo mật tin nhắn văn bản với mã hoá Triple DES và xác thực RSA">
+  <meta name="keywords" content="chat bảo mật, triple des, rsa, mã hóa, xác thực, sha-256">
+
+  <!-- Favicons -->
+  <link href="img/favicon.png" rel="icon">
+  <link href="img/apple-touch-icon.png" rel="apple-touch-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Raleway:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <!-- Bootstrap CSS -->
+  <link href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
+
+  <!-- Bootstrap Icons -->
+  <link href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.css') }}" rel="stylesheet">
+
+  <!-- AOS Animation -->
+  <link href="{{ url_for('static', filename='vendor/aos/aos.css') }}" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link href="{{ url_for('static', filename='vendor/fontawesome-free/css/all.min.css') }}" rel="stylesheet">
+
+  <!-- Swiper -->
+  <link href="{{ url_for('static', filename='vendor/swiper/swiper-bundle.min.css') }}" rel="stylesheet">
 </head>
-<body>
-    <h1>Secure Chat</h1>
-    {% if message %}
-        <p style="color: green;">{{ message }}</p>
-    {% endif %}
-    {% if error %}
-        <p style="color: red;">{{ error }}</p>
-    {% endif %}
-    <h2>Your Contacts</h2>
-    <select id="receiverSelect">
-        <option value="">Select a contact</option>
-        {% for contact in contacts %}
-            <option value="{{ contact.contact_user_id }}">{{ contact.user.name }} ({{ contact.user.gmail }})</option>
-        {% endfor %}
-    </select>
-    <br><br>
-    <textarea id="messageInput" placeholder="Type your message"></textarea>
-    <br>
-    <button onclick="sendMessage()">Send Message</button>
-    <button onclick="goToChat()">Go to Chat</button>
-    <br><br>
-    <h2>Send Invitation</h2>
-    <input type="email" id="invitationEmail" placeholder="Enter email to invite" required>
-    <br>
-    <button onclick="sendInvitation()">Send Invitation</button>
-    <br><br>
-    <a href="{{ url_for('routes.logout') }}">Logout</a>
-    <script>
-        async function sendMessage() {
-            const receiverId = document.getElementById('receiverSelect').value;
-            const message = document.getElementById('messageInput').value;
-            if (!receiverId || !message) {
-                alert("Please select a contact and enter a message.");
-                return;
-            }
 
-            const response = await fetch('/send_message', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ receiver_id: receiverId, message: message })
-            });
-            const result = await response.json();
-            if (response.ok) {
-                document.getElementById('messageInput').value = '';
-                window.location.href = `/chat/${receiverId}`; // Chuyển hướng sang chat
-            } else {
-                alert(result.message);
-            }
+<body class="index-page">
+
+  <header id="header" class="header sticky-top">
+
+    <div class="topbar d-flex align-items-center">
+      <div class="container d-flex justify-content-center justify-content-md-between">
+        <div class="contact-info d-flex align-items-center">
+          <i class="bi bi-envelope d-flex align-items-center"><a href="mailto:support@securechat.com">support@securechat.com</a></i>
+          <i class="bi bi-phone d-flex align-items-center ms-4"><span>+84 123 456 789</span></i>
+        </div>
+        <div class="social-links d-none d-md-flex align-items-center">
+          <a href="#" class="twitter"><i class="bi bi-twitter-x"></i></a>
+          <a href="#" class="facebook"><i class="bi bi-facebook"></i></a>
+          <a href="#" class="instagram"><i class="bi bi-instagram"></i></a>
+          <a href="#" class="linkedin"><i class="bi bi-linkedin"></i></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="branding d-flex align-items-center">
+      <div class="container position-relative d-flex align-items-center justify-content-between">
+        <a href="index.html" class="logo d-flex align-items-center me-auto" style="text-decoration: none">
+          <h1 class="sitename">SecureChat</h1>
+        </a>
+
+      <nav id="navmenu" class="navmenu">
+  <ul>
+    <li><a href="#hero" class="active">Trang chủ</a></li>
+    <li><a href="#about">Giới thiệu</a></li>
+    <li><a href="#services">Tính năng</a></li>
+    <li><a href="#security">Bảo mật</a></li>
+    <li><a href="#workflow">Luồng xử lý</a></li>
+    <li class="dropdown"><a href="#"><span>Tài nguyên</span> <i class="bi bi-chevron-down toggle-dropdown"></i></a>
+      <ul>
+        <li><a href="#">Tài liệu API</a></li>
+        <li class="dropdown"><a href="#"><span>Hướng dẫn</span> <i class="bi bi-chevron-down toggle-dropdown"></i></a>
+          <ul>
+            <li><a href="#">Cài đặt</a></li>
+            <li><a href="#">Sử dụng cơ bản</a></li>
+            <li><a href="#">Tính năng nâng cao</a></li>
+            <li><a href="#">Tích hợp</a></li>
+            <li><a href="#">FAQ</a></li>
+          </ul>
+        </li>
+        <li><a href="#">Blog</a></li>
+        <li><a href="#">Cộng đồng</a></li>
+        <li><a href="#">Hỗ trợ</a></li>
+      </ul>
+    </li>
+    <li><a href="#contact">Liên hệ</a></li>
+    <li class="dropdown">
+      <a href="#" class="d-flex align-items-center">
+        {% if user %}
+          <i class="fas fa-user"></i>
+          <span class="ms-2">{{ user.name }}</span>
+        {% else %}
+          <span>Truy cập Chat</span>
+        {% endif %}
+        <i class="bi bi-chevron-down toggle-dropdown ms-2"></i>
+      </a>
+      <ul>
+        {% if user %}
+          <li><a href="/chat">Truy cập Chat</a></li>
+          <li><a href="/logout">Đăng xuất</a></li>
+        {% else %}
+          <li><a href="/auth">Đăng nhập / Đăng ký</a></li>
+        {% endif %}
+      </ul>
+    </li>
+  </ul>
+  <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+</nav>
+
+{#       <div class="user-section d-none d-sm-flex align-items-center">#}
+{#  {% if user %}#}
+{#    <a href="/chat" class="user-info d-flex align-items-center">#}
+{#      <i class="fas fa-user"></i>#}
+{#      <span class="ms-2">{{ user.name }}</span>#}
+{#    </a>#}
+{#    <a href="/logout" class="ms-3 btn btn-outline-danger btn-sm">Đăng xuất</a>#}
+{#  {% else %}#}
+{#    <a href="/auth" class="btn btn-primary">Đăng nhập / Đăng ký</a>#}
+{#  {% endif %}#}
+{#</div>#}
+      </div>
+    </div>
+
+  </header>
+
+  <main class="main">
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero section">
+      <img src="static/img/640839-cyber-wallpaper.jpg" alt="" data-aos="fade-in">
+      <div class="container position-relative">
+        <div class="welcome position-relative" data-aos="fade-down" data-aos-delay="100">
+          <h2>CHÀO MỪNG ĐẾN VỚI SECURECHAT</h2>
+          <p>Ứng dụng bảo mật tin nhắn văn bản với mã hoá Triple DES và xác thực RSA</p>
+        </div>
+
+        <div class="content row gy-4">
+          <div class="col-lg-4 d-flex align-items-stretch">
+            <div class="why-box" data-aos="zoom-out" data-aos-delay="200">
+              <h3>Tại sao chọn SecureChat?</h3>
+              <p>
+                SecureChat sử dụng sự kết hợp hoàn hảo giữa mã hóa Triple DES cho nội dung tin nhắn và RSA 2048-bit cho xác thực danh tính.
+                Với SHA-256 kiểm tra tính toàn vẹn, mọi tin nhắn đều được bảo vệ tuyệt đối khỏi giả mạo và đánh cắp.
+              </p>
+              <div class="text-center">
+                <a href="#about" class="more-btn"><span>Tìm hiểu thêm</span> <i class="bi bi-chevron-right"></i></a>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-8 d-flex align-items-stretch">
+            <div class="d-flex flex-column justify-content-center">
+              <div class="row gy-4">
+                <div class="col-xl-4 d-flex align-items-stretch">
+                  <div class="icon-box" data-aos="zoom-out" data-aos-delay="300">
+                    <i class="bi bi-shield-lock"></i>
+                    <h4>Mã hóa Triple DES</h4>
+                    <p>Nội dung tin nhắn được mã hóa với Triple DES CBC mode</p>
+                  </div>
+                </div>
+
+                <div class="col-xl-4 d-flex align-items-stretch">
+                  <div class="icon-box" data-aos="zoom-out" data-aos-delay="400">
+                    <i class="bi bi-key"></i>
+                    <h4>Xác thực RSA 2048-bit</h4>
+                    <p>Danh tính được xác thực với RSA và chữ ký số SHA-256</p>
+                  </div>
+                </div>
+
+                <div class="col-xl-4 d-flex align-items-stretch">
+                  <div class="icon-box" data-aos="zoom-out" data-aos-delay="500">
+                    <i class="bi bi-check-circle"></i>
+                    <h4>Kiểm tra toàn vẹn</h4>
+                    <p>SHA-256 đảm bảo tin nhắn không bị thay đổi khi truyền</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="about section">
+      <div class="container">
+        <div class="row gy-4 gx-5">
+          <div class="col-lg-6 position-relative align-self-start" data-aos="fade-up" data-aos-delay="200" style="display: flex;
+              justify-content: center;
+              align-items: center;
+              height: -webkit-fill-available;">
+            <img src="static/img/Data Privacy Bill Would Limit Marketing Uses of Personal Info.jpg" class="img-fluid" alt="">
+          </div>
+
+          <div class="col-lg-6 content" data-aos="fade-up" data-aos-delay="100">
+            <h3>Về SecureChat Triple DES & RSA</h3>
+            <p>
+              SecureChat là hệ thống bảo mật cho ứng dụng chat văn bản, được phát triển dựa trên yêu cầu của Đề tài 20.
+              Ứng dụng kết hợp các thuật toán mã hóa tiên tiến để đảm bảo an toàn tuyệt đối cho mọi cuộc trò chuyện.
+            </p>
+            <ul>
+              <li>
+                <i class="fa-solid fa-lock"></i>
+                <div>
+                  <h5>Triple DES CBC Mode</h5>
+                  <p>Mã hóa nội dung tin nhắn với Triple DES sử dụng CBC mode, đảm bảo tính bảo mật cao cho dữ liệu văn bản</p>
+                </div>
+              </li>
+              <li>
+                <i class="fa-solid fa-fingerprint"></i>
+                <div>
+                  <h5>RSA 2048-bit (OAEP + SHA-256)</h5>
+                  <p>Xác thực danh tính người gửi/nhận và trao đổi khóa an toàn với RSA 2048-bit kết hợp OAEP padding</p>
+                </div>
+              </li>
+              <li>
+                <i class="fa-solid fa-shield-alt"></i>
+                <div>
+                  <h5>SHA-256 Hash</h5>
+                  <p>Kiểm tra tính toàn vẹn của tin nhắn, phát hiện mọi thay đổi hoặc giả mạo trong quá trình truyền P2P</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section id="stats" class="stats section light-background">
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+        <div class="row gy-4">
+          <div class="col-lg-3 col-md-6 d-flex flex-column align-items-center">
+            <i class="fa-solid fa-shield-halved"></i>
+            <div class="stats-item">
+              <span data-purecounter-start="0" data-purecounter-end="3" data-purecounter-duration="1" class="purecounter"></span>
+              <p>Lớp mã hóa Triple DES</p>
+            </div>
+          </div>
+
+          <div class="col-lg-3 col-md-6 d-flex flex-column align-items-center">
+            <i class="fa-solid fa-key"></i>
+            <div class="stats-item">
+              <span data-purecounter-start="0" data-purecounter-end="2048" data-purecounter-duration="1" class="purecounter"></span>
+              <p>Bit RSA Key</p>
+            </div>
+          </div>
+
+          <div class="col-lg-3 col-md-6 d-flex flex-column align-items-center">
+            <i class="fas fa-hashtag"></i>
+            <div class="stats-item">
+              <span data-purecounter-start="0" data-purecounter-end="256" data-purecounter-duration="1" class="purecounter"></span>
+              <p>Bit SHA Hash</p>
+            </div>
+          </div>
+
+          <div class="col-lg-3 col-md-6 d-flex flex-column align-items-center">
+            <i class="fas fa-shield-alt"></i>
+            <div class="stats-item">
+              <span data-purecounter-start="0" data-purecounter-end="100" data-purecounter-duration="1" class="purecounter"></span>
+              <p>% Bảo mật</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Services Section -->
+    <section id="services" class="services section">
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Tính năng chính</h2>
+        <p>Các thành phần bảo mật trong hệ thống SecureChat</p>
+      </div>
+
+      <div class="container">
+        <div class="row gy-4">
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="service-item position-relative">
+              <div class="icon">
+                <i class="fas fa-lock"></i>
+              </div>
+              <a href="#" class="stretched-link">
+                <h3>Mã hóa Triple DES</h3>
+              </a>
+              <p>Sử dụng Triple DES với CBC mode để mã hóa nội dung tin nhắn văn bản, đảm bảo tính bảo mật cao</p>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="service-item position-relative">
+              <div class="icon">
+                <i class="fas fa-user-check"></i>
+              </div>
+              <a href="#" class="stretched-link">
+                <h3>Xác thực RSA</h3>
+              </a>
+              <p>RSA 2048-bit với OAEP padding xác thực danh tính người gửi và người nhận một cách an toàn</p>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="service-item position-relative">
+              <div class="icon">
+                <i class="fas fa-fingerprint"></i>
+              </div>
+              <a href="#" class="stretched-link">
+                <h3>Chữ ký số</h3>
+              </a>
+              <p>Ký số với RSA/SHA-256 đảm bảo tính xác thực và không thể chối từ của người gửi</p>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="400">
+            <div class="service-item position-relative">
+              <div class="icon">
+                <i class="fas fa-random"></i>
+              </div>
+              <a href="#" class="stretched-link">
+                <h3>Trao đổi khóa an toàn</h3>
+              </a>
+              <p>Khóa Triple DES được mã hóa bằng RSA công khai của người nhận trước khi truyền</p>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="500">
+            <div class="service-item position-relative">
+              <div class="icon">
+                <i class="fas fa-check-double"></i>
+              </div>
+              <a href="#" class="stretched-link">
+                <h3>Kiểm tra toàn vẹn</h3>
+              </a>
+              <p>SHA-256 hash kiểm tra IV và ciphertext để phát hiện mọi thay đổi trong quá trình truyền</p>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="600">
+            <div class="service-item position-relative">
+              <div class="icon">
+                <i class="fas fa-network-wired"></i>
+              </div>
+              <a href="#" class="stretched-link">
+                <h3>Kết nối P2P</h3>
+              </a>
+              <p>Truyền tin nhắn trực tiếp peer-to-peer, không qua server trung gian</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workflow Section -->
+    <section id="workflow" class="departments section">
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Luồng xử lý</h2>
+        <p>Quy trình bảo mật từng bước trong SecureChat</p>
+      </div>
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+        <div class="row">
+          <div class="col-lg-3">
+            <ul class="nav nav-tabs flex-column">
+              <li class="nav-item">
+                <a class="nav-link active show" data-bs-toggle="tab" href="#workflow-tab-1">1. Handshake</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#workflow-tab-2">2. Xác thực & Trao khóa</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#workflow-tab-3">3. Mã hóa & Kiểm tra</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#workflow-tab-4">4. Phía người nhận</a>
+              </li>
+            </ul>
+          </div>
+          <div class="col-lg-9 mt-4 mt-lg-0">
+            <div class="tab-content">
+              <div class="tab-pane active show" id="workflow-tab-1">
+                <div class="row">
+                  <div class="col-lg-8 details order-2 order-lg-1">
+                    <h3>Bước 1: Handshake</h3>
+                    <p class="fst-italic">Thiết lập kết nối ban đầu giữa hai bên</p>
+                    <ul>
+                      <li>Người gửi gửi tín hiệu kết nối "Hello!"</li>
+                      <li>Người nhận phản hồi "Ready!"</li>
+                      <li>Cả hai bên trao đổi khóa công khai RSA để chuẩn bị cho việc trao đổi khóa mã hóa</li>
+                    </ul>
+                    <p>Giai đoạn này đảm bảo cả hai bên sẵn sàng cho việc truyền tin an toàn.</p>
+                  </div>
+                  <div class="col-lg-4 text-center order-1 order-lg-2">
+                    <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80" alt="Handshake" class="img-fluid">
+                  </div>
+                </div>
+              </div>
+              <div class="tab-pane" id="workflow-tab-2">
+                <div class="row">
+                  <div class="col-lg-8 details order-2 order-lg-1">
+                    <h3>Bước 2: Xác thực & Trao đổi khóa</h3>
+                    <p class="fst-italic">Xác thực danh tính và trao đổi khóa Triple DES an toàn</p>
+                    <ul>
+                      <li>Người gửi ký thông tin xác thực (ID + thời gian) bằng RSA/SHA-256</li>
+                      <li>Người gửi mã hóa khóa Triple DES bằng khóa RSA công khai của người nhận</li>
+                      <li>Gói gửi đi bao gồm:</li>
+                    </ul>
+                    <pre style="background: #f4f4f4; padding: 10px; border-radius: 5px;">
+{
+  "signed_info": "<chữ ký số>",
+  "encrypted_3des_key": "<khóa đã mã hóa>"
+}</pre>
+                  </div>
+                  <div class="col-lg-4 text-center order-1 order-lg-2">
+                    <img src="https://images.unsplash.com/photo-1633265486064-086b219458ec?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80" alt="Key Exchange" class="img-fluid">
+                  </div>
+                </div>
+              </div>
+              <div class="tab-pane" id="workflow-tab-3">
+                <div class="row">
+                  <div class="col-lg-8 details order-2 order-lg-1">
+                    <h3>Bước 3: Mã hóa & Kiểm tra toàn vẹn</h3>
+                    <p class="fst-italic">Mã hóa tin nhắn và tạo hash kiểm tra</p>
+                    <ul>
+                      <li>Tạo IV (Initialization Vector) ngẫu nhiên</li>
+                      <li>Mã hóa nội dung tin nhắn văn bản bằng Triple DES (CBC mode)</li>
+                      <li>Tạo hash: SHA-256(IV || ciphertext)</li>
+                      <li>Gói gửi đi:</li>
+                    </ul>
+                    <pre style="background: #f4f4f4; padding: 10px; border-radius: 5px;">
+{
+  "iv": "<vector khởi tạo>",
+  "cipher": "<tin nhắn đã mã hóa>",
+  "hash": "<SHA-256 hash>",
+  "sig": "<chữ ký số>"
+}</pre>
+                  </div>
+                  <div class="col-lg-4 text-center order-1 order-lg-2">
+                    <img src="https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=600&q=80" alt="Encryption" class="img-fluid">
+                  </div>
+                </div>
+              </div>
+              <div class="tab-pane" id="workflow-tab-4">
+                <div class="row">
+                  <div class="col-lg-8 details order-2 order-lg-1">
+                    <h3>Bước 4: Xử lý phía người nhận</h3>
+                    <p class="fst-italic">Giải mã và xác thực tin nhắn</p>
+                    <ol>
+                      <li>Giải mã khóa Triple DES bằng RSA private key</li>
+                      <li>Kiểm tra tính toàn vẹn bằng cách tính lại SHA-256 và so sánh</li>
+                      <li>Xác thực chữ ký RSA</li>
+                    </ol>
+                    <p><strong>Nếu hợp lệ:</strong></p>
+                    <ul>
+                      <li>Giải mã tin nhắn văn bản bằng Triple DES</li>
+                      <li>Hiển thị nội dung tin nhắn</li>
+                      <li>Gửi ACK (acknowledgment)</li>
+                    </ul>
+                    <p><strong>Nếu không hợp lệ:</strong></p>
+                    <ul>
+                      <li>Gửi NACK (negative acknowledgment)</li>
+                      <li>Cảnh báo lỗi: "Message Integrity Compromised!"</li>
+                    </ul>
+                  </div>
+                  <div class="col-lg-4 text-center order-1 order-lg-2">
+                    <img src="static/img/310817-network-security-wallpaper.png" alt="Decryption" class="img-fluid">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Security Section -->
+    <section id="security" class="appointment section">
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Công nghệ bảo mật</h2>
+        <p>Chi tiết về các thuật toán và phương pháp bảo mật được sử dụng</p>
+      </div>
+
+      <div class="container">
+        <div class="row gy-4">
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="100">
+            <div class="service-item position-relative text-center">
+              <h3>Triple DES (3DES)</h3>
+              <div class="icon mb-3">
+                <i class="fas fa-lock fa-3x"></i>
+              </div>
+              <p><strong>Mã hóa khối đối xứng</strong></p>
+              <ul class="list-unstyled mt-3 text-center">
+                <li>✓ Độ dài khóa: 168 bit (3 x 56 bit)</li>
+                <li>✓ Chế độ: CBC (Cipher Block Chaining)</li>
+                <li>✓ Kích thước khối: 64 bit</li>
+                <li>✓ Ba lần mã hóa DES liên tiếp</li>
+                <li>✓ An toàn hơn DES đơn lẻ nhiều lần</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="300">
+            <div class="service-item position-relative text-center">
+              <h3>SHA-256</h3>
+              <div class="icon mb-3">
+                <i class="fas fa-hashtag fa-3x"></i>
+              </div>
+              <p><strong>Hàm băm mật mã</strong></p>
+              <ul class="list-unstyled mt-3 text-center">
+                <li>✓ Độ dài đầu ra: 256 bit</li>
+                <li>✓ Kiểm tra tính toàn vẹn</li>
+                <li>✓ Chống giả mạo tin nhắn</li>
+                <li>✓ Sử dụng trong chữ ký số</li>
+                <li>✓ Một chiều, không thể đảo ngược</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="200">
+            <div class="service-item position-relative text-center">
+              <h3>RSA 2048-bit</h3>
+              <div class="icon mb-3">
+                <i class="fas fa-key fa-3x"></i>
+              </div>
+              <p><strong>Mã hóa bất đối xứng</strong></p>
+              <ul class="list-unstyled mt-3 text-center">
+                <li>✓ Độ dài khóa: 2048 bit</li>
+                <li>✓ Padding: OAEP với SHA-256</li>
+                <li>✓ Xác thực danh tính</li>
+                <li>✓ Trao đổi khóa an toàn</li>
+                <li>✓ Ký số điện tử</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Implementation Section -->
+    <section id="implementation" class="testimonials section">
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Cấu trúc dữ liệu</h2>
+        <p>Định dạng gói tin trong quá trình truyền nhận</p>
+      </div>
+
+      <div class="container">
+        <div class="row gy-4">
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="service-item position-relative">
+              <h3>Gói xác thực & trao khóa</h3>
+              <pre class="bg-light p-3">
+{
+  "signed_info": {
+    "user_id": "sender_123",
+    "timestamp": "2024-01-20T10:30:00Z",
+    "signature": "RSA_SHA256_signature"
+  },
+  "encrypted_3des_key": "RSA_encrypted_key",
+  "public_key": "sender_RSA_public_key"
+}
+              </pre>
+            </div>
+          </div>
+
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="service-item position-relative">
+              <h3>Gói tin nhắn mã hóa</h3>
+              <pre class="bg-light p-3">
+{
+  "iv": "random_initialization_vector",
+  "cipher": "3DES_encrypted_message",
+  "hash": "SHA256(iv || cipher)",
+  "sig": "RSA_message_signature",
+  "timestamp": "2024-01-20T10:31:00Z"
+}
+              </pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Team Section -->
+    <section id="team" class="doctors section">
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Đội ngũ phát triển</h2>
+        <p>Sinh viên thực hiện đề tài 20</p>
+      </div>
+
+      <div class="container">
+        <div class="row gy-4">
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="team-member d-flex align-items-start">
+              <div class="pic"><img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=400&q=80" class="img-fluid" alt="Team Lead"></div>
+              <div class="member-info">
+                <h4>TRỊNH VĂN HÀO</h4>
+                <span>Team Leader & Backend Developer</span>
+                <p>Phụ trách thiết kế kiến trúc bảo mật và Phát triển module Triple DES và xử lý P2P connection</p>
+                <div class="social">
+                  <a href=""><i class="bi bi-github"></i></a>
+                  <a href=""><i class="bi bi-linkedin"></i></a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="team-member d-flex align-items-start">
+              <div class="pic"><img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=400&q=80" class="img-fluid" alt="Developer"></div>
+              <div class="member-info">
+                <h4>CHU VĂN HUY</h4>
+                <span>Frontend Developer</span>
+                <p>Thiết kế giao diện và tích hợp các module bảo mật</p>
+                <div class="social">
+                  <a href=""><i class="bi bi-github"></i></a>
+                  <a href=""><i class="bi bi-linkedin"></i></a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="team-member d-flex align-items-start">
+              <div class="pic"><img src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=400&q=80" class="img-fluid" alt="Frontend Dev"></div>
+              <div class="member-info">
+                <h4>NGUYỄN THỊ MAI HƯƠNG</h4>
+                <span>Báo cáo</span>
+                <p>Kiểm thử bảo mật và viết tài liệu hướng dẫn</p>
+                <div class="social">
+                  <a href=""><i class="bi bi-github"></i></a>
+                  <a href=""><i class="bi bi-linkedin"></i></a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="400">
+            <div class="team-member d-flex align-items-start">
+              <div class="pic"><img src="https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=400&q=80" class="img-fluid" alt="Tester"></div>
+              <div class="member-info">
+                <h4>NGUYỄN PHẠM NGUYÊN GIÁP</h4>
+                <span>Báo cáo</span>
+                <p>Kiểm thử bảo mật và viết tài liệu hướng dẫn</p>
+                <div class="social">
+                  <a href=""><i class="bi bi-github"></i></a>
+                  <a href=""><i class="bi bi-linkedin"></i></a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer id="footer" class="footer light-background">
+    <div class="container footer-top">
+      <div class="row gy-4">
+        <div class="col-lg-4 col-md-6 footer-about">
+          <a href="index.html" class="logo d-flex align-items-center">
+            <span class="sitename">SecureChat</span>
+          </a>
+          <div class="footer-contact pt-3">
+            <p>Đề tài 20: Ứng dụng bảo mật tin nhắn văn bản</p>
+            <p>Triple DES & RSA</p>
+            <p class="mt-3"><strong>Môn học:</strong> <span>Nhập môn an toàn, bảo mật thông tin</span></p>
+            <p><strong>Email:</strong> <span>nhom20@university.edu.vn</span></p>
+          </div>
+          <div class="social-links d-flex mt-4">
+            <a href=""><i class="bi bi-github"></i></a>
+            <a href=""><i class="bi bi-linkedin"></i></a>
+          </div>
+        </div>
+
+        <div class="col-lg-2 col-md-3 footer-links">
+          <h4>Tài liệu</h4>
+          <ul>
+            <li><a href="#">Báo cáo đề tài</a></li>
+            <li><a href="#">Source code</a></li>
+            <li><a href="#">Demo video</a></li>
+            <li><a href="#">Slide thuyết trình</a></li>
+            <li><a href="#">Tài liệu API</a></li>
+          </ul>
+        </div>
+
+        <div class="col-lg-2 col-md-3 footer-links">
+          <h4>Công nghệ</h4>
+          <ul>
+            <li><a href="#">Triple DES</a></li>
+            <li><a href="#">RSA 2048-bit</a></li>
+            <li><a href="#">SHA-256</a></li>
+            <li><a href="#">P2P Connection</a></li>
+            <li><a href="#">Python Crypto</a></li>
+          </ul>
+        </div>
+
+        <div class="col-lg-2 col-md-3 footer-links">
+          <h4>Tham khảo</h4>
+          <ul>
+            <li><a href="#">NIST Standards</a></li>
+            <li><a href="#">Cryptography Docs</a></li>
+            <li><a href="#">Security Papers</a></li>
+            <li><a href="#">Best Practices</a></li>
+            <li><a href="#">Related Works</a></li>
+          </ul>
+        </div>
+
+        <div class="col-lg-2 col-md-3 footer-links">
+          <h4>Links</h4>
+          <ul>
+            <li><a href="#">University Website</a></li>
+            <li><a href="#">Department Page</a></li>
+            <li><a href="#">Course Materials</a></li>
+            <li><a href="#">GitHub Repo</a></li>
+            <li><a href="#">Demo Online</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container copyright text-center mt-4">
+      <p>© <span>Copyright</span> <strong class="px-1 sitename">SecureChat - Đề tài 20</strong> <span>@CNTT16-05</span></p>
+      <div class="credits">
+        Developed by Nhóm sinh viên - Môn Nhập môn an toàn, bảo mật thông tin
+      </div>
+    </div>
+  </footer>
+
+  <!-- Vendor JS Files -->
+  <script src="{{ url_for('static', filename='vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+
+  <!-- AOS Animation -->
+  <script src="{{ url_for('static', filename='vendor/aos/aos.js') }}"></script>
+
+  <!-- Swiper -->
+  <script src="{{ url_for('static', filename='vendor/swiper/swiper-bundle.min.js') }}"></script>
+
+  <!-- Main JS File -->
+  <script src="{{ url_for('static', filename='index.js') }}"></script>
+
+  <script>
+    // Initialize AOS
+    AOS.init({
+      duration: 1000,
+      easing: 'ease-in-out',
+      once: true,
+      mirror: false
+    });
+
+    // Preloader
+    const preloader = document.querySelector('#preloader');
+    if (preloader) {
+      window.addEventListener('load', () => {
+        preloader.remove();
+      });
+    }
+
+    // Scroll top button
+    const scrollTop = document.querySelector('.scroll-top');
+    if (scrollTop) {
+      const togglescrollTop = function() {
+        window.scrollY > 100 ? scrollTop.classList.add('active') : scrollTop.classList.remove('active');
+      }
+      window.addEventListener('load', togglescrollTop);
+      document.addEventListener('scroll', togglescrollTop);
+      scrollTop.addEventListener('click', window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      }));
+    }
+
+    // Mobile nav toggle
+    const mobileNavShow = document.querySelector('.mobile-nav-toggle');
+    if (mobileNavShow) {
+      mobileNavShow.addEventListener('click', function(e) {
+        document.body.classList.toggle('mobile-nav-active');
+        mobileNavShow.classList.toggle('bi-list');
+        mobileNavShow.classList.toggle('bi-x');
+      });
+    }
+
+    // FAQ toggle
+    document.querySelectorAll('.faq-item h3, .faq-item .faq-toggle').forEach((faqItem) => {
+      faqItem.addEventListener('click', () => {
+        faqItem.parentNode.classList.toggle('faq-active');
+      });
+    });
+
+    // Stats counter
+    const purecounters = document.querySelectorAll('.purecounter');
+    purecounters.forEach((purecounter) => {
+      const startVal = parseInt(purecounter.getAttribute('data-purecounter-start'));
+      const endVal = parseInt(purecounter.getAttribute('data-purecounter-end'));
+      const duration = parseInt(purecounter.getAttribute('data-purecounter-duration')) * 1000;
+
+      let startTime = null;
+      const updateCounter = (currentTime) => {
+        if (!startTime) startTime = currentTime;
+        const progress = Math.min((currentTime - startTime) / duration, 1);
+        purecounter.textContent = Math.floor(progress * (endVal - startVal) + startVal).toLocaleString();
+        if (progress < 1) {
+          requestAnimationFrame(updateCounter);
         }
+      };
 
-        function goToChat() {
-            const receiverId = document.getElementById('receiverSelect').value;
-            if (!receiverId) {
-                alert("Please select a contact.");
-                return;
-            }
-            window.location.href = `/chat/${receiverId}`; // Chuyển hướng sang chat
-        }
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            requestAnimationFrame(updateCounter);
+            observer.unobserve(entry.target);
+          }
+        });
+      });
 
-        async function sendInvitation() {
-            const email = document.getElementById('invitationEmail').value;
-            if (!email) {
-                alert("Please enter an email address.");
-                return;
-            }
-
-            const response = await fetch('/send_invitation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ receiver_gmail: email })
-            });
-            const result = await response.json();
-            if (response.ok) {
-                alert(result.message);
-                document.getElementById('invitationEmail').value = '';
-            } else {
-                alert(result.message);
-            }
-        }
-    </script>
+      observer.observe(purecounter);
+    });
+  </script>
 </body>
 </html>

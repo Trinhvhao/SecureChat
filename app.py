@@ -1,10 +1,12 @@
-from flask import Flask, session
-from flask_sqlalchemy import SQLAlchemy
-from datetime import timedelta
 import os
-from config import Config
-from datetime import datetime
 import sqlite3
+from datetime import datetime
+from datetime import timedelta
+
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
+from config import Config
 
 # Khởi tạo Flask app
 app = Flask(__name__)
@@ -34,20 +36,23 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 # Khởi tạo SQLAlchemy
 db = SQLAlchemy()
 
+
 # Tùy chỉnh model base để áp dụng múi giờ
 class BaseModel(db.Model):
     __abstract__ = True
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(vn_timezone))
-    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(vn_timezone), onupdate=lambda: datetime.now(vn_timezone))
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(vn_timezone),
+                           onupdate=lambda: datetime.now(vn_timezone))
+
 
 # Gắn db với app
 db.init_app(app)
 
 # Import models sau khi khởi tạo db
-from models import User, Invitation, Message, Contact, Session
 
 # Import và đăng ký blueprint
 from routes import bp
+
 app.register_blueprint(bp)
 
 # Tạo bảng cơ sở dữ liệu nếu chưa tồn tại

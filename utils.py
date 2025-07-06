@@ -1,15 +1,14 @@
-import logging
 import base64
+import logging
 import os
-import pytz
-import time
 from datetime import datetime
 
+import pytz
 from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes, padding as sym_padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.asymmetric.padding import OAEP, MGF1, PSS
+from cryptography.hazmat.primitives.ciphers import Cipher, modes
 
 # Cấu hình logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,9 +17,11 @@ logger = logging.getLogger(__name__)
 # Đặt múi giờ Việt Nam
 vn_timezone = pytz.timezone('Asia/Ho_Chi_Minh')
 
+
 def get_current_vn_timestamp():
     """Lấy timestamp hiện tại theo múi giờ Việt Nam"""
     return int(datetime.now(vn_timezone).timestamp())
+
 
 def generate_rsa_key_pair():
     """Tạo cặp khóa RSA 2048-bit"""
@@ -42,15 +43,18 @@ def generate_rsa_key_pair():
         logger.error(f"Failed to generate RSA key pair: {str(e)}")
         raise
 
+
 def handshake_initiate():
     """Tạo tín hiệu handshake 'Hello!'"""
     logger.info("Initiating handshake with 'Hello!'")
     return "Hello!"
 
+
 def handshake_respond():
     """Tạo phản hồi handshake 'Ready!'"""
     logger.info("Responding to handshake with 'Ready!'")
     return "Ready!"
+
 
 def encrypt_3des_key(triple_des_key, rsa_public_key_pem):
     """Mã hóa khóa TripleDES bằng khóa công khai RSA (OAEP + SHA-256)"""
@@ -78,6 +82,7 @@ def encrypt_3des_key(triple_des_key, rsa_public_key_pem):
     except Exception as e:
         logger.error(f"Failed to encrypt TripleDES key: {str(e)}")
         raise
+
 
 def decrypt_3des_key(encrypted_key, rsa_private_key_pem):
     """Giải mã khóa TripleDES bằng khóa riêng RSA"""
@@ -118,6 +123,7 @@ def decrypt_3des_key(encrypted_key, rsa_private_key_pem):
         logger.error(f"Failed to decrypt TripleDES key: {str(e)}")
         raise ValueError(f"Decryption failed: {str(e)}")
 
+
 def sign_auth_info(sender_id, receiver_id, rsa_private_key_pem):
     """Ký thông tin xác thực bằng RSA/SHA-256"""
     try:
@@ -144,6 +150,7 @@ def sign_auth_info(sender_id, receiver_id, rsa_private_key_pem):
         logger.error(f"Failed to sign auth info: {str(e)}")
         raise
 
+
 def verify_auth_info(signature, auth_data, rsa_public_key_pem):
     try:
         # Kiểm tra định dạng auth_data
@@ -162,7 +169,8 @@ def verify_auth_info(signature, auth_data, rsa_public_key_pem):
             return False
 
         logger.debug(f"Auth Data for verify: {auth_data}")
-        logger.debug(f"Signature for verify: {signature[:50] if isinstance(signature, str) else str(signature)[:50]}...")
+        logger.debug(
+            f"Signature for verify: {signature[:50] if isinstance(signature, str) else str(signature)[:50]}...")
         logger.debug(f"Public Key for verify: {rsa_public_key_pem[:50]}...")
         public_key = serialization.load_pem_public_key(rsa_public_key_pem.encode())
         public_key.verify(
@@ -181,6 +189,7 @@ def verify_auth_info(signature, auth_data, rsa_public_key_pem):
         logger.error(f"Failed to verify auth info: {str(e)}")
         return False
 
+
 def generate_3des_key():
     """Tạo khóa TripleDES ngẫu nhiên (24 bytes)"""
     try:
@@ -190,6 +199,7 @@ def generate_3des_key():
     except Exception as e:
         logger.error(f"Failed to generate TripleDES key: {str(e)}")
         raise
+
 
 def encrypt_message(message, triple_des_key):
     """Mã hóa tin nhắn bằng TripleDES (CBC mode) với padding đúng cách"""
@@ -212,6 +222,7 @@ def encrypt_message(message, triple_des_key):
     except Exception as e:
         logger.error(f"Encryption failed: {str(e)}", exc_info=True)
         raise
+
 
 def decrypt_message(ciphertext, iv, triple_des_key):
     """Giải mã tin nhắn với xử lý padding đúng cách"""
@@ -238,6 +249,7 @@ def decrypt_message(ciphertext, iv, triple_des_key):
         logger.error(f"Decryption failed: {str(e)}", exc_info=True)
         raise ValueError(f"Decryption failed: {str(e)}")
 
+
 def compute_message_hash(iv, ciphertext):
     """Tính hash SHA-256 của IV || ciphertext"""
     try:
@@ -247,6 +259,7 @@ def compute_message_hash(iv, ciphertext):
     except Exception as e:
         logger.error(f"Failed to compute message hash: {str(e)}")
         raise
+
 
 def sign_message(iv, ciphertext, rsa_private_key_pem):
     """Ký số tin nhắn (IV || ciphertext) bằng RSA/SHA-256"""
@@ -266,6 +279,7 @@ def sign_message(iv, ciphertext, rsa_private_key_pem):
         logger.error(f"Failed to sign message: {str(e)}")
         raise
 
+
 def verify_message(iv, ciphertext, signature, rsa_public_key_pem):
     """Xác minh chữ ký RSA và hash SHA-256 của tin nhắn"""
     try:
@@ -284,6 +298,7 @@ def verify_message(iv, ciphertext, signature, rsa_public_key_pem):
         logger.error(f"Failed to verify message signature: {str(e)}")
         return False
 
+
 def create_message_packet(message, triple_des_key, rsa_private_key_pem):
     """Tạo gói tin nhắn theo yêu cầu đề bài"""
     try:
@@ -300,6 +315,7 @@ def create_message_packet(message, triple_des_key, rsa_private_key_pem):
     except Exception as e:
         logger.error(f"Failed to create message packet: {str(e)}")
         raise
+
 
 def verify_and_decrypt_message(packet, triple_des_key, rsa_public_key_pem):
     """Xác minh và giải mã với xử lý lỗi tốt hơn"""

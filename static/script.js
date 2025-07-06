@@ -4,57 +4,57 @@ const chatData = {
         name: 'Vi Hiếu',
         avatar: 'https://i.pravatar.cc/50?img=2',
         messages: [
-            { type: 'received', content: 'Hiii 🔥', time: 'May 31, 2025, 9:26 AM' }
+            {type: 'received', content: 'Hiii 🔥', time: 'May 31, 2025, 9:26 AM'}
         ]
     },
     2: {
         name: 'Nguyen Khoa',
         avatar: 'https://i.pravatar.cc/50?img=3',
         messages: [
-            { type: 'received', content: 'Hey, làm sao để code React hooks?', time: 'April 12, 2025, 2:15 PM' },
-            { type: 'sent', content: 'Bạn có thể bắt đầu với useState và useEffect', time: 'April 12, 2025, 2:18 PM' },
-            { type: 'received', content: 'Cảm ơn bạn! 👍', time: 'April 12, 2025, 2:20 PM' }
+            {type: 'received', content: 'Hey, làm sao để code React hooks?', time: 'April 12, 2025, 2:15 PM'},
+            {type: 'sent', content: 'Bạn có thể bắt đầu với useState và useEffect', time: 'April 12, 2025, 2:18 PM'},
+            {type: 'received', content: 'Cảm ơn bạn! 👍', time: 'April 12, 2025, 2:20 PM'}
         ]
     },
     3: {
         name: 'Nguyễn Tài',
         avatar: 'https://i.pravatar.cc/50?img=4',
         messages: [
-            { type: 'sent', content: 'Chào bạn, dự án thế nào rồi?', time: 'March 28, 2025, 10:30 AM' },
-            { type: 'received', content: 'Đang làm phần authentication', time: 'March 28, 2025, 10:45 AM' },
-            { type: 'sent', content: 'OK, cần giúp gì không?', time: 'March 28, 2025, 10:46 AM' }
+            {type: 'sent', content: 'Chào bạn, dự án thế nào rồi?', time: 'March 28, 2025, 10:30 AM'},
+            {type: 'received', content: 'Đang làm phần authentication', time: 'March 28, 2025, 10:45 AM'},
+            {type: 'sent', content: 'OK, cần giúp gì không?', time: 'March 28, 2025, 10:46 AM'}
         ]
     },
     4: {
         name: 'Văn Chi',
         avatar: 'https://i.pravatar.cc/50?img=5',
         messages: [
-            { type: 'received', content: 'Meeting lúc 3h chiều nha', time: 'March 25, 2025, 9:00 AM' },
-            { type: 'sent', content: 'OK bạn, mình sẽ chuẩn bị slide', time: 'March 25, 2025, 9:05 AM' }
+            {type: 'received', content: 'Meeting lúc 3h chiều nha', time: 'March 25, 2025, 9:00 AM'},
+            {type: 'sent', content: 'OK bạn, mình sẽ chuẩn bị slide', time: 'March 25, 2025, 9:05 AM'}
         ]
     },
     5: {
         name: 'Đỗ Tài',
         avatar: 'https://i.pravatar.cc/50?img=6',
         messages: [
-            { type: 'received', content: 'Source code mình gửi qua email rồi nhé', time: 'March 5, 2025, 4:20 PM' },
-            { type: 'sent', content: 'Cảm ơn bạn nhiều!', time: 'March 5, 2025, 4:25 PM' }
+            {type: 'received', content: 'Source code mình gửi qua email rồi nhé', time: 'March 5, 2025, 4:20 PM'},
+            {type: 'sent', content: 'Cảm ơn bạn nhiều!', time: 'March 5, 2025, 4:25 PM'}
         ]
     },
     6: {
         name: 'Tuan Le Anh',
         avatar: 'https://i.pravatar.cc/50?img=7',
         messages: [
-            { type: 'sent', content: 'Cuối tuần đi cafe không?', time: 'March 1, 2025, 11:00 AM' },
-            { type: 'received', content: 'OK, mình rảnh cả ngày', time: 'March 1, 2025, 11:15 AM' },
-            { type: 'sent', content: 'Vậy 10h sáng nhé', time: 'March 1, 2025, 11:16 AM' }
+            {type: 'sent', content: 'Cuối tuần đi cafe không?', time: 'March 1, 2025, 11:00 AM'},
+            {type: 'received', content: 'OK, mình rảnh cả ngày', time: 'March 1, 2025, 11:15 AM'},
+            {type: 'sent', content: 'Vậy 10h sáng nhé', time: 'March 1, 2025, 11:16 AM'}
         ]
     },
     7: {
         name: 'Wong Ji Kim',
         avatar: 'https://i.pravatar.cc/50?img=8',
         messages: [
-            { type: 'received', content: 'Hello, can we discuss about the project?', time: 'February 20, 2025, 3:00 PM' }
+            {type: 'received', content: 'Hello, can we discuss about the project?', time: 'February 20, 2025, 3:00 PM'}
         ]
     }
 };
@@ -168,7 +168,7 @@ function updateProfileInfo(chatId) {
 
 // Add click event to chat items
 chatItems.forEach(item => {
-    item.addEventListener('click', function() {
+    item.addEventListener('click', function () {
         // Remove active class from all items
         chatItems.forEach(chat => chat.classList.remove('active'));
 
@@ -246,7 +246,7 @@ const messageInput = document.querySelector('#messageInput');
 const sendButton = document.querySelector('#sendButton');
 const inputActions = document.querySelector('.input-actions');
 
-messageInput.addEventListener('input', function() {
+messageInput.addEventListener('input', function () {
     if (this.value.trim() !== '') {
         // Has text - show paper plane and hide extra icons
         sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
@@ -259,7 +259,7 @@ messageInput.addEventListener('input', function() {
 });
 
 // Add click event for send button
-sendButton.addEventListener('click', function() {
+sendButton.addEventListener('click', function () {
     const messageText = messageInput.value.trim();
 
     if (messageText === '') {
@@ -276,7 +276,7 @@ sendButton.addEventListener('click', function() {
 });
 
 // Add enter key event for sending messages
-messageInput.addEventListener('keypress', function(e) {
+messageInput.addEventListener('keypress', function (e) {
     if (e.key === 'Enter') {
         const messageText = this.value.trim();
         if (messageText !== '') {
@@ -300,7 +300,7 @@ if (currentTheme === 'dark') {
     themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
 }
 
-themeToggle.addEventListener('click', function() {
+themeToggle.addEventListener('click', function () {
     // Add animation class
     this.classList.add('switching');
 
@@ -325,13 +325,13 @@ themeToggle.addEventListener('click', function() {
 
 // Profile dropdown
 const profileDropdown = document.getElementById('profileDropdown');
-profileDropdown.addEventListener('click', function(e) {
+profileDropdown.addEventListener('click', function (e) {
     e.stopPropagation();
     this.classList.toggle('active');
 });
 
 // Close dropdown when clicking outside
-document.addEventListener('click', function() {
+document.addEventListener('click', function () {
     profileDropdown.classList.remove('active');
 });
 
@@ -339,13 +339,13 @@ document.addEventListener('click', function() {
 let isOnline = true;
 const statusDot = document.querySelector('.status-dot');
 
-document.querySelector('.dropdown-item:first-child').addEventListener('click', function() {
+document.querySelector('.dropdown-item:first-child').addEventListener('click', function () {
     isOnline = !isOnline;
     statusDot.style.backgroundColor = isOnline ? '#31a24c' : '#f02849';
 });
 
 // Add click events for section headers
-document.addEventListener('click', function(e) {
+document.addEventListener('click', function (e) {
     if (e.target.closest('.section-header')) {
         const header = e.target.closest('.section-header');
         header.classList.toggle('expanded');
@@ -355,10 +355,10 @@ document.addEventListener('click', function(e) {
 // Add hover effect for input buttons
 const inputButtons = document.querySelectorAll('.input-actions i, .input-field i');
 inputButtons.forEach(btn => {
-    btn.addEventListener('mouseenter', function() {
+    btn.addEventListener('mouseenter', function () {
         this.style.transform = 'scale(1.1)';
     });
-    btn.addEventListener('mouseleave', function() {
+    btn.addEventListener('mouseleave', function () {
         this.style.transform = 'scale(1)';
     });
 });

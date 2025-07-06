@@ -1,11 +1,17 @@
-from flask import Blueprint, jsonify, request, render_template, redirect, url_for, session
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from app import db, app
-from models import User, Invitation, Message, Contact, Session
-from werkzeug.security import generate_password_hash, check_password_hash
+from models import User, Invitation, Message, Contact, Session, DeleteRequest
+from datetime import datetime, timedelta
+import logging
+import re
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import uuid
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from functools import wraps
+import requests
+from flask import Blueprint, jsonify, request, render_template, redirect, url_for, session
+from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
 from utils import (
     generate_rsa_key_pair,
@@ -19,11 +25,6 @@ from utils import (
     create_message_packet,
     verify_and_decrypt_message
 )
-from datetime import datetime, timedelta
-from functools import wraps
-import logging
-import re
-import requests
 
 # Cấu hình logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -36,6 +37,7 @@ logging.getLogger('werkzeug').setLevel(logging.WARNING)
 vn_timezone = Config.TIMEZONE
 
 bp = Blueprint('routes', __name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Decorator kiểm tra đăng nhập
 def login_required(f):
@@ -46,7 +48,6 @@ def login_required(f):
         user = User.query.get(session['user_id'])
         if not user:
             session.pop('user_id', None)
-            logger.error(f"User not found for user_id={session['user_id']}")
             return redirect(url_for('routes.auth', next=request.url))
         return f(*args, **kwargs)
     return decorated_function
@@ -90,8 +91,8 @@ def index():
     if 'user_id' in session:
         user = User.query.get(session['user_id'])
         if user:
-            return redirect(url_for('routes.chat'))
-    return redirect(url_for('routes.auth'))
+            return render_template('index.html', user=user)
+    return render_template('index.html')
 
 # Route render trang auth
 @bp.route('/auth', methods=['GET'])
@@ -123,9 +124,9 @@ def login():
         if user and check_password_hash(user.password_hash, password):
             session['user_id'] = user.id
             session['session_start'] = datetime.now(vn_timezone)
-            session['last_activity'] = datetime.now(vn_timezone)  # Thêm timestamp hoạt động
+            session['last_activity'] = datetime.now(vn_timezone)
             session.permanent = True
-            user.is_online = True  # Cập nhật trạng thái online khi đăng nhập
+            user.is_online = True
             db.session.commit()
             logger.info(f"User logged in successfully: {gmail}, user_id={user.id}")
             return jsonify({
@@ -168,13 +169,13 @@ def register():
             rsa_public_key=public_key,
             rsa_private_key=private_key,
             created_at=datetime.now(vn_timezone),
-            is_online=False  # Mặc định offline khi đăng ký
+            is_online=False
         )
         db.session.add(user)
         db.session.commit()
         session['user_id'] = user.id
         session['session_start'] = datetime.now(vn_timezone)
-        session['last_activity'] = datetime.now(vn_timezone)  # Thêm timestamp hoạt động
+        session['last_activity'] = datetime.now(vn_timezone)
         session.permanent = True
         logger.info(f"User registered successfully: {gmail}, user_id={user.id}")
         return jsonify({
@@ -193,7 +194,7 @@ def logout():
     if 'user_id' in session:
         user = User.query.get(session['user_id'])
         if user:
-            user.is_online = False  # Cập nhật trạng thái offline khi logout
+            user.is_online = False
             db.session.commit()
     session.clear()
     response = redirect(url_for('routes.auth'))
@@ -482,7 +483,6 @@ def send_message():
         )
         db.session.add(msg)
         db.session.commit()
-        # Cập nhật hoạt động cuối cùng khi gửi tin nhắn
         session['last_activity'] = datetime.now(vn_timezone)
         logger.info(f"Message sent successfully: message_id={msg.id}, user_id={user_id}, receiver_id={receiver_id}")
         return jsonify({
@@ -511,7 +511,6 @@ def chat(contact_id=None):
         contacts = Contact.query.filter_by(user_id=user_id).join(User, User.id == Contact.contact_user_id).all()
         message = request.args.get('message')
 
-        # Lấy số tin nhắn chưa đọc cho tất cả liên hệ
         unread_counts = {}
         for contact in contacts:
             count = Message.query.filter_by(
@@ -522,7 +521,6 @@ def chat(contact_id=None):
             unread_counts[str(contact.contact_user_id)] = count
 
         if request.headers.get('Accept') == 'application/json':
-            # Trả về JSON nếu là request API
             contact_list = [{
                 "contact_user_id": contact.contact_user_id,
                 "user": {
@@ -566,7 +564,6 @@ def chat(contact_id=None):
                 reverse_session.triple_des_key = encrypted_key_for_contact
                 db.session.commit()
                 logger.info(f"Key exchanged for session: session_id={db_session.id}, user_id={user_id}, contact_id={contact_id}")
-        # Cập nhật hoạt động cuối cùng khi truy cập chat
         session['last_activity'] = datetime.now(vn_timezone)
         return render_template('chat.html', user=user, contacts=contacts, active_contact=contact, unread_counts=unread_counts)
 
@@ -611,7 +608,6 @@ def get_messages(contact_id):
                 "plaintext": plaintext if status == "ACK" else "Message Integrity Compromised!",
                 "created_at": msg.created_at.strftime('%Y-%m-%d %H:%M:%S')
             })
-        # Cập nhật hoạt động cuối cùng khi lấy tin nhắn
         session['last_activity'] = datetime.now(vn_timezone)
         return jsonify({"status": "success", "messages": decrypted_messages}), 200
     except Exception as e:
@@ -638,7 +634,6 @@ def mark_as_read(contact_id):
             msg.status = 'received'
         db.session.commit()
         logger.info(f"Marked messages as read for user_id={user_id}, contact_id={contact_id}")
-        # Cập nhật hoạt động cuối cùng khi đánh dấu đọc
         session['last_activity'] = datetime.now(vn_timezone)
         return jsonify({"status": "success", "message": "Messages marked as read"}), 200
     except Exception as e:
@@ -661,16 +656,13 @@ def get_unread_counts():
                 status='sent'
             ).count()
             unread_counts[str(contact.contact_user_id)] = count
-        # Cập nhật hoạt động cuối cùng khi lấy số tin nhắn chưa đọc
         session['last_activity'] = datetime.now(vn_timezone)
         return jsonify({"status": "success", "unread_counts": unread_counts}), 200
     except Exception as e:
         logger.error(f"Failed to get unread counts: user_id={user_id}, error={str(e)}")
         return jsonify({"status": "error", "message": f"Failed to get unread counts: {str(e)}"}), 500
 
-# Thêm vào file routes.py, sau các import và trước các route hiện tại
-from utils import handshake_initiate
-
+# Route lấy tín hiệu handshake
 @bp.route('/get_handshake_signal', methods=['GET'])
 @login_required
 def get_handshake_signal():
@@ -682,30 +674,12 @@ def get_handshake_signal():
         logger.error(f"Failed to generate handshake signal: {str(e)}")
         return jsonify({"status": "error", "message": f"Failed to generate handshake signal: {str(e)}"}), 500
 
-# Middleware kiểm tra timeout hoạt động
-@app.before_request
-def check_user_activity():
-    if 'user_id' in session and 'last_activity' in session:
-        user = User.query.get(session['user_id'])
-        if user:
-            inactivity_period = datetime.now(vn_timezone) - session['last_activity']
-            if inactivity_period > timedelta(minutes=5):  # Timeout sau 5 phút không hoạt động
-                user.is_online = False
-                db.session.commit()
-                logger.info(f"User {user.id} set to offline due to inactivity")
-            else:
-                user.is_online = True  # Đặt lại trạng thái online nếu có hoạt động
-                db.session.commit()
-        session['last_activity'] = datetime.now(vn_timezone)  # Cập nhật timestamp hoạt động
-
 # Route lấy ngày bắt đầu chat
-# Route lấy ngày bắt đầu chat dựa trên created_at của Contact
 @bp.route('/get_chat_start_date/<int:contact_id>', methods=['GET'])
 @login_required
 def get_chat_start_date(contact_id):
     user_id = session['user_id']
     try:
-        # Lấy ngày tạo liên hệ từ bảng Contact
         contact = Contact.query.filter_by(user_id=user_id, contact_user_id=contact_id).first()
         if not contact:
             logger.error(f"Contact not found: user_id={user_id}, contact_id={contact_id}")
@@ -717,3 +691,172 @@ def get_chat_start_date(contact_id):
     except Exception as e:
         logger.error(f"Failed to get chat start date: user_id={user_id}, contact_id={contact_id}, error={str(e)}")
         return jsonify({"status": "error", "message": f"Failed to get chat start date: {str(e)}"}), 500
+
+# Route gửi yêu cầu xóa chat
+@bp.route('/request_delete_chat/<int:contact_id>', methods=['POST'])
+@login_required
+def request_delete_chat(contact_id):
+    user_id = session['user_id']
+    try:
+        target = User.query.get(contact_id)
+        if not target:
+            logger.error(f"Invalid contact: contact_id={contact_id}")
+            return jsonify({"status": "error", "message": "Invalid contact"}), 400
+
+        # Kiểm tra xem đã có yêu cầu pending hay chưa
+        existing_request = DeleteRequest.query.filter_by(initiator_id=user_id, target_id=contact_id, status='pending').first()
+        if existing_request:
+            logger.info(f"Existing pending request found: request_id={existing_request.id}, initiator_id={user_id}, target_id={contact_id}")
+            return jsonify({"status": "success", "message": "Request already pending", "request_id": existing_request.id}), 200
+
+        # Tạo mới yêu cầu xóa
+        delete_request = DeleteRequest(initiator_id=user_id, target_id=contact_id, status='pending')
+        db.session.add(delete_request)
+        db.session.commit()
+
+        # Gửi sự kiện qua SocketIO
+        socketio.emit('delete_request', {
+            'initiator_id': user_id,
+            'request_id': delete_request.id,
+            'contact_name': User.query.get(user_id).name,
+            'target_id': contact_id
+        }, room=str(contact_id))
+        logger.info(f"Delete request sent via SocketIO: initiator_id={user_id}, target_id={contact_id}, request_id={delete_request.id}")
+        return jsonify({"status": "success", "message": "Delete request sent", "request_id": delete_request.id}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to request delete: user_id={user_id}, contact_id={contact_id}, error={str(e)}")
+        return jsonify({"status": "error", "message": f"Failed to request delete: {str(e)}"}), 500
+
+# Route lấy danh sách yêu cầu pending
+@bp.route('/get_pending_requests', methods=['GET'])
+@login_required
+def get_pending_requests():
+    user_id = session['user_id']
+    try:
+        pending_requests = DeleteRequest.query.filter_by(target_id=user_id, status='pending').all()
+        requests_data = [{
+            'request_id': req.id,
+            'initiator_id': req.initiator_id,
+            'initiator_name': User.query.get(req.initiator_id).name,
+            'created_at': req.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        } for req in pending_requests]
+        logger.info(f"Retrieved {len(requests_data)} pending requests for user_id={user_id}")
+        return jsonify({"status": "success", "pending_requests": requests_data}), 200
+    except Exception as e:
+        logger.error(f"Failed to get pending requests: user_id={user_id}, error={str(e)}")
+        return jsonify({"status": "error", "message": f"Failed to get pending requests: {str(e)}"}), 500
+
+# Route xác nhận xóa chat
+# Route xác nhận xóa chat (bao gồm cả từ chối)
+@bp.route('/confirm_delete_chat/<int:request_id>', methods=['POST'])
+@login_required
+def confirm_delete_chat(request_id):
+    user_id = session['user_id']
+    try:
+        delete_request = DeleteRequest.query.get(request_id)
+        if not delete_request or delete_request.target_id != user_id or delete_request.status != 'pending':
+            logger.error(f"Invalid or expired delete request: request_id={request_id}")
+            return jsonify({"status": "error", "message": "Invalid or expired request"}), 400
+
+        initiator = User.query.get(delete_request.initiator_id)
+        if not initiator:
+            logger.error(f"Initiator not found: initiator_id={delete_request.initiator_id}")
+            return jsonify({"status": "error", "message": "Initiator not found"}), 404
+
+        # Lấy action từ request JSON (confirm hoặc reject)
+        data = request.get_json()
+        action = data.get('action', 'confirm')  # Mặc định là 'confirm' nếu không có action
+
+        if action == 'confirm':
+            # Xử lý xác nhận xóa chat
+            handshake_response = requests.post(
+                url_for('routes.handshake', _external=True),
+                json={"receiver_id": delete_request.initiator_id, "signal": handshake_initiate()},
+                headers={'Cookie': request.headers.get('Cookie')}
+            )
+            if handshake_response.status_code != 200 or handshake_response.json().get('status') != 'success':
+                logger.error(f"Handshake failed: user_id={user_id}, initiator_id={delete_request.initiator_id}")
+                return jsonify({"status": "error", "message": "Handshake failed"}), 500
+
+            rsa_private_key_pem = User.query.get(user_id).rsa_private_key
+            signed_info = sign_auth_info(user_id, delete_request.initiator_id, rsa_private_key_pem)
+            exchange_response = requests.post(
+                url_for('routes.exchange_key', _external=True),
+                json={"receiver_id": delete_request.initiator_id, "signed_info": signed_info},
+                headers={'Cookie': request.headers.get('Cookie')}
+            )
+            if exchange_response.status_code != 200 or exchange_response.json().get('status') != 'success':
+                logger.error(f"Key exchange failed: user_id={user_id}, initiator_id={delete_request.initiator_id}")
+                return jsonify({"status": "error", "message": "Key exchange failed"}), 500
+
+            delete_request.status = 'accepted'
+            delete_request.confirmed_at = datetime.now(vn_timezone)
+            db.session.commit()
+
+            messages = Message.query.filter(
+                ((Message.sender_id == user_id) & (Message.receiver_id == delete_request.initiator_id)) |
+                ((Message.sender_id == delete_request.initiator_id) & (Message.receiver_id == user_id))
+            ).all()
+            for msg in messages:
+                db.session.delete(msg)
+            db.session.commit()
+
+            socketio.emit('delete_confirmed', {'target_id': user_id}, room=str(delete_request.initiator_id))
+            logger.info(f"Delete confirmed: initiator_id={delete_request.initiator_id}, target_id={user_id}")
+            return jsonify({"status": "success", "message": "Delete confirmed and messages deleted"}), 200
+
+        elif action == 'reject':
+            # Xử lý từ chối yêu cầu xóa
+            delete_request.status = 'rejected'
+            delete_request.confirmed_at = datetime.now(vn_timezone)
+            db.session.commit()
+            logger.info(f"Delete request rejected: initiator_id={delete_request.initiator_id}, target_id={user_id}, request_id={request_id}")
+            return jsonify({"status": "success", "message": "Delete request rejected"}), 200
+
+        else:
+            logger.error(f"Invalid action: action={action}")
+            return jsonify({"status": "error", "message": "Invalid action"}), 400
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to confirm delete: user_id={user_id}, request_id={request_id}, error={str(e)}")
+        return jsonify({"status": "error", "message": f"Failed to confirm delete: {str(e)}"}), 500
+
+# Xử lý SocketIO
+@socketio.on('connect')
+@login_required
+def handle_connect():
+    user_id = session['user_id']
+    join_room(str(user_id))
+    logger.info(f"User connected: user_id={user_id}")
+
+@socketio.on('disconnect')
+@login_required
+def handle_disconnect():
+    user_id = session['user_id']
+    leave_room(str(user_id))
+    logger.info(f"User disconnected: user_id={user_id}")
+
+@socketio.on('join')
+def on_join(data):
+    user_id = session.get('user_id')
+    if user_id:
+        join_room(str(user_id))
+        logger.info(f"User joined room: user_id={user_id}")
+
+# Middleware kiểm tra timeout hoạt động
+@app.before_request
+def check_user_activity():
+    if 'user_id' in session and 'last_activity' in session:
+        user = User.query.get(session['user_id'])
+        if user:
+            inactivity_period = datetime.now(vn_timezone) - session['last_activity']
+            if inactivity_period > timedelta(minutes=5):
+                user.is_online = False
+                db.session.commit()
+                logger.info(f"User {user.id} set to offline due to inactivity")
+            else:
+                user.is_online = True
+                db.session.commit()
+        session['last_activity'] = datetime.now(vn_timezone)
